@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+*.local
+.project.env
+
+# IDE
+.vscode/
+.idea/
+
+# AI Studio runtime
+tmp/
+logs/
+traces/
+worktrees/
+*.log
+
+# Generated local agent entrypoints
+AGENTS.md
+CLAUDE.md
+
+# Local AI agent state
+.studio/
+**/.studio/
+
+# Engine generated files
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
+**/[Mm]emoryCaptures/
+**/[Rr]ecordings/
