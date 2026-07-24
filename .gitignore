@@ -36,3 +36,6 @@ CLAUDE.md
 **/[Uu]ser[Ss]ettings/
 **/[Mm]emoryCaptures/
 **/[Rr]ecordings/
+
+# Imported asset archives
+*.unitypackage
