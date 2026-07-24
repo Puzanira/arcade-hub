@@ -1,0 +1,17 @@
+{
+    "name": "AiGameStudio.ArcadeHub",
+    "rootNamespace": "AiGameStudio.ArcadeHub",
+    "references": [
+        "AiGameStudio.ArcadeControls",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
