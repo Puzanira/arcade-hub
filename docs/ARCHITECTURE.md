@@ -112,7 +112,91 @@ Run headless (Editor closed):
   -testPlatform PlayMode  -testResults .studio/test-playmode.xml -logFile -
 ```
 
-## Path to stage ③ (launcher v1)
+## Hold-to-launch (stage ③, landed)
+
+Layered on top of the hub-v0 menu without changing it: each slot is bound to a physical control
+(`controlName` in the config), and *holding / cranking / deflecting* that control for ~5 s charges a bar
+0→1 to launch it. Releasing decays the charge to 0 over ~1 s (a fresh hold starts from 0, never
+backwards), and only one control charges at a time (exclusivity). At full charge an **installed** slot
+loads its scene; a **planned** slot flashes a "СКОРО — <game>" overlay and resets. A rain of
+slot-coloured objects fills the screen in proportion to the charge and clears as it decays.
+
+```
+ launcher-config.json  "tuning" { chargeSeconds, decaySeconds, thresholds }  +  per-slot controlName
+        │ parsed by                                                                │
+        ▼                                                                          ▼
+ LaunchTuning ─────────────►  LaunchChargeMachine  (pure: charge/decay/exclusivity/launch-edge)
+ ArcadeInput ─read only─► ControlReadings ─► LaunchInputSampler (pure: per-control engagement + thresholds
+                                                                  + crank |Δ°|>thr with a decay timeout)
+                                                                          │ engaged[] per slot
+        HoldToLaunchController (MonoBehaviour: adapter + progress bar + rain + "СКОРО" overlay)  ◄──┘
+```
+
+The charge/decay/exclusivity logic and the engagement thresholds are **pure C#**, fully EditMode-tested
+(`LaunchChargeMachineTests`, `LaunchInputSamplerTests`, `LaunchTuningTests`); `HoldToLaunchController` is
+the thin Unity adapter + view. Input still arrives **only** through `ArcadeInput` — the per-slot
+engagement aggregation (a joystick/height/crank "is-this-control-active?" reader) lives on the hub side
+over the package's public API and is a candidate to promote into `arcade-controls`.
+
+The engagement rules per control kind (spec §2.3): buttons — held; height sensors — value above a
+threshold; joystick — deflection magnitude above a threshold; crank — `|degrees this frame|` above a
+threshold, latched for a short timeout so the gaps between discrete turns don't read as "released".
+
+**Coexistence note:** hub-v0's `HubMenuController` keeps its instant RED-to-select (its PlayMode test
+owns that contract), so two selection models run side by side for now. Hold-to-launch is exercised
+through controls the menu does not consume (Crank for the installed Test Game slot, Green for a planned
+slot) to avoid cross-talk. Retiring instant-select and resolving joystick navigation-vs-charge is a
+follow-up decision.
+
+## Games integration (stage ②, landed)
+
+The launcher now runs the first two REAL cabinet games. Each is a UPM package consumed by a local
+`file:` dependency (same honest one-PC seam as arcade-controls; git-URL later is a separate decision):
+
+```json
+"com.aigamestudio.game-home-alone":  "file:../../../../home-alone/components/unity-game/Assets/_Project",
+"com.aigamestudio.game-life-choices": "file:../../../../life-choices/components/unity-game/Assets/_Project"
+```
+
+Both games depend on the same `arcade-controls` package the hub already pins, so UPM resolves ONE shared
+copy (no version conflict — the games were built on 6000.5.1, the hub hosts on 6000.5.3; "package older
+than host" resolves cleanly). Their entry scenes live inside the packages and are added to Build Settings
+by package path (`AddGameScenesToBuildSettings`, idempotent):
+
+```
+Packages/com.aigamestudio.game-home-alone/Scenes/Apartment.unity
+Packages/com.aigamestudio.game-life-choices/Scenes/ThanksNoThanks.unity
+```
+
+`launcher-config.json` now ships **three** installed slots — Test Game (Crank), Home Alone (RedButton →
+`Apartment`), Life Choices (GreenButton → `ThanksNoThanks`); the rest stay planned.
+
+### Returning to the launcher (`LauncherReturn`)
+
+The game-scene contract says a game "dies cleanly on MenuButton". The built-in `TestGameController`
+satisfies it by loading `HubMenu` itself. The packaged games, however, are also standalone-buildable:
+on MenuButton they end their run **in place** (freeze, no `DontDestroyOnLoad`/static state) but do NOT
+know the hub's menu scene — a standalone build has no launcher to return to. So the LAUNCHER owns the
+return: before loading an external game it arms `LauncherReturn`, a launcher-owned `DontDestroyOnLoad`
+watchdog that watches the same `ArcadeInput.MenuButton` and loads `HubMenu` on the exit gesture, then
+destroys itself. The gesture is the universal cabinet rule (and matches Home Alone's own exit): a
+MenuButton still held while the game LOADS must not exit — a release is seen first, then a fresh press
+fires (plus a one-frame warmup). It is armed from both launch paths (`HoldToLaunchController.Fire` and
+`HubMenuController.Choose`) and skipped for the self-returning TestGame, so hub-v0's PlayMode loop is
+untouched.
+
+### Tests
+
+- **EditMode** — a config test pins the shipped `launcher-config.json` to exactly three installed slots
+  with the two games' entry scene names.
+- **PlayMode** (`GamesIntegrationPlayModeTests`) — headless `FakeBackend` loop for each game: launch from
+  the menu (Home Alone via its RedButton, Life Choices via the hold-to-launch charge on GreenButton),
+  assert the game scene is active with its controller alive (`GameController` / `GameDriver`), return via
+  MenuButton (the `LauncherReturn` watchdog), and re-enter as a clean start (one controller, no menu
+  survivor). Run WITH graphics, each test also writes a 1920×1080 PNG (menu 3× [PLAY]; each game running
+  from the hub) and asserts zero magenta.
+
+## Original path to stage ③ (for reference)
 
 hub-v0 is a **keyed menu**: press RED to select. Stage ③ replaces instant selection with the real
 cabinet interaction — *hold/crank a control for 5 seconds* to launch (a charge bar 0→1, decay on

@@ -11,5 +11,11 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_Project/Scenes/TestGame.unity
     guid: 92bfad51ca20a4652bc9931d71cc26ff
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-home-alone/Scenes/Apartment.unity
+    guid: 5178018a4d390468491cc0bee19cc5ab
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-life-choices/Scenes/ThanksNoThanks.unity
+    guid: 569f2a8c80a05453fb795ed88a28f20d
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

@@ -84,6 +84,10 @@ namespace AiGameStudio.ArcadeHub
 
             if (slot.IsInstalled)
             {
+                // External games reset in place on MenuButton but don't know the hub's menu scene, so the
+                // launcher arms a return watchdog. The built-in TestGame returns to the menu itself.
+                if (slot.entryScene != HubScenes.TestGame)
+                    LauncherReturn.ArmFor(HubScenes.HubMenu);
                 SceneManager.LoadScene(slot.entryScene);
                 return;
             }
@@ -125,7 +129,7 @@ namespace AiGameStudio.ArcadeHub
                 new Vector2(leftMargin, -90f), new Vector2(rowWidth, 70f), 54, FontStyle.Bold,
                 Color.white, TextAnchor.MiddleLeft);
             CreateLabel(canvas.transform, "HubSubtitle",
-                "Joystick up/down to move  •  RED (1) to select  •  MENU (Esc) exits a game",
+                "Joystick up/down to move  •  RED (Э, слева от Enter) to select  •  MENU (Esc) exits a game",
                 new Vector2(leftMargin, -160f), new Vector2(rowWidth, 40f), 26, FontStyle.Normal,
                 new Color(0.7f, 0.7f, 0.75f), TextAnchor.MiddleLeft);
 

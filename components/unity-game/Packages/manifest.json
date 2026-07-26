@@ -1,6 +1,8 @@
 {
   "dependencies": {
     "com.aigamestudio.arcade-controls": "file:../../../../arcade-controls/components/unity-game/Packages/com.aigamestudio.arcade-controls",
+    "com.aigamestudio.game-home-alone": "file:../../../../home-alone/components/unity-game/Assets/_Project",
+    "com.aigamestudio.game-life-choices": "file:../../../../life-choices/components/unity-game/Assets/_Project",
     "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
     "com.unity.2d.animation": "15.1.0",
     "com.unity.2d.aseprite": "5.0.3",

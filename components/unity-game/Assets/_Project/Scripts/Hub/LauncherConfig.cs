@@ -15,6 +15,15 @@ namespace AiGameStudio.ArcadeHub
         public List<LauncherSlot> slots = new List<LauncherSlot>();
 
         /// <summary>
+        /// Hold-to-launch tuning (charge/decay seconds, thresholds). Optional in JSON — an omitted or
+        /// partial block degrades to shipped defaults via <see cref="TuningOrDefault"/>.
+        /// </summary>
+        public LaunchTuning tuning = new LaunchTuning();
+
+        /// <summary>The tuning with every non-positive coefficient replaced by its default (never null).</summary>
+        public LaunchTuning TuningOrDefault() => (tuning ?? new LaunchTuning()).Normalized();
+
+        /// <summary>
         /// Parse a config from a JSON string. Throws <see cref="FormatException"/> on empty or malformed
         /// input. A valid document with an empty (or missing) slot array yields an empty, usable config.
         /// </summary>

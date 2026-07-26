@@ -1,0 +1,21 @@
+{
+    "name": "AiGameStudio.ArcadeHub.Editor",
+    "rootNamespace": "AiGameStudio.ArcadeHub.Editor",
+    "references": [
+        "AiGameStudio.ArcadeHub",
+        "AiGameStudio.ArcadeControls",
+        "UnityEngine.UI",
+        "UnityEngine.ImageConversionModule"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

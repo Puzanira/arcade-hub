@@ -1,0 +1,6 @@
+{
+  "name": "DemoGame.Runtime",
+  "rootNamespace": "DemoGame",
+  "references": [],
+  "autoReferenced": true
+}

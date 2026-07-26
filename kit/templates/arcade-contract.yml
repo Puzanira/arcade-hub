@@ -1,0 +1,19 @@
+# Arcade integration contract check (Unity-free).
+# Drop this file into the game repo at `.github/workflows/arcade-contract.yml`.
+# It runs the file-level contract checks on every push and PR. No Unity license needed.
+#
+# The optional Unity-test stage (contract EditMode tests via GameCI) is described in
+# ARCADE_INTEGRATION.md — enable it later by adding the UNITY_LICENSE secret.
+name: arcade-contract
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  contract-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run arcade contract check
+        run: python3 contract_check.py

@@ -62,6 +62,32 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [Test]
+        public void ShippedConfig_HasExactlyThreeInstalledSlots_WithGameEntryScenes()
+        {
+            // games-integration: the launcher ships THREE installed slots — the built-in Test Game plus the
+            // two packaged games — each with a real entry scene; every other slot is still planned.
+            LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
+
+            int installed = 0;
+            foreach (LauncherSlot s in config.slots)
+                if (s.IsInstalled) installed++;
+            Assert.AreEqual(3, installed,
+                "Test Game + Home Alone + Life Choices are installed; the remaining slots are planned.");
+
+            LauncherSlot testGame = config.slots.Find(s => s.displayName == "Test Game");
+            LauncherSlot homeAlone = config.slots.Find(s => s.displayName == "Home Alone");
+            LauncherSlot lifeChoices = config.slots.Find(s => s.displayName == "Life Choices");
+
+            Assert.IsNotNull(homeAlone, "Home Alone slot present.");
+            Assert.IsNotNull(lifeChoices, "Life Choices slot present.");
+            Assert.IsTrue(testGame.IsInstalled, "Test Game stays installed.");
+            Assert.IsTrue(homeAlone.IsInstalled, "Home Alone is now installed.");
+            Assert.IsTrue(lifeChoices.IsInstalled, "Life Choices is now installed.");
+            Assert.AreEqual("Apartment", homeAlone.entryScene, "Home Alone loads its Apartment entry scene.");
+            Assert.AreEqual("ThanksNoThanks", lifeChoices.entryScene, "Life Choices loads its ThanksNoThanks entry scene.");
+        }
+
+        [Test]
         public void BrokenFile_ToLoader_ToMenuController_ComesUpWithZeroRows_NoCrash()
         {
             // The full done-contract #2 chain: broken JSON on disk -> loader degrades with one

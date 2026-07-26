@@ -1,0 +1,12 @@
+{
+  "unityProjectPath": ".",
+  "gameFolder": "Assets/YourGame",
+  "packageNamePrefix": "com.aigamestudio.game-",
+  "rawInputAllowlist": [],
+  "assetWhitelist": [
+    "DefaultVolumeProfile.asset",
+    "UniversalRenderPipelineGlobalSettings.asset",
+    "Settings",
+    "StreamingAssets"
+  ]
+}

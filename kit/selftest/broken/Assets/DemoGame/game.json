@@ -1,0 +1,6 @@
+{
+  "name": "Demo Game",
+  "version": "0.1.0",
+  "entryScene": "Assets/DemoGame/Scenes/Missing.unity",
+  "controls": ["RedButton", "Keyboard"]
+}

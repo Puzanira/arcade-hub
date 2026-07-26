@@ -9,6 +9,22 @@
         "com.unity.ugui": "2.5.0"
       }
     },
+    "com.aigamestudio.game-home-alone": {
+      "version": "file:../../../../home-alone/components/unity-game/Assets/_Project",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {
+        "com.aigamestudio.arcade-controls": "0.1.0"
+      }
+    },
+    "com.aigamestudio.game-life-choices": {
+      "version": "file:../../../../life-choices/components/unity-game/Assets/_Project",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {
+        "com.aigamestudio.arcade-controls": "0.1.0"
+      }
+    },
     "com.coplaydev.unity-mcp": {
       "version": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
       "depth": 0,

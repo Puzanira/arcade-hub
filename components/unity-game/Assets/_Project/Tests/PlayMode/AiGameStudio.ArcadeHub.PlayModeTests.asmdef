@@ -4,6 +4,8 @@
     "references": [
         "AiGameStudio.ArcadeHub",
         "AiGameStudio.ArcadeControls",
+        "HomeAlone.Runtime",
+        "ThanksNoThanks.Runtime",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "UnityEngine.UI"

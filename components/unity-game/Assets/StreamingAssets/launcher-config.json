@@ -1,11 +1,19 @@
 {
   "slots": [
     { "controlName": "Crank",       "displayName": "Test Game",        "entryScene": "TestGame", "status": "installed" },
-    { "controlName": "RedButton",   "displayName": "Home Alone",       "entryScene": "",         "status": "planned" },
-    { "controlName": "GreenButton", "displayName": "Life Choices",     "entryScene": "",         "status": "planned" },
+    { "controlName": "RedButton",   "displayName": "Home Alone",       "entryScene": "Apartment",     "status": "installed" },
+    { "controlName": "GreenButton", "displayName": "Life Choices",     "entryScene": "ThanksNoThanks", "status": "installed" },
     { "controlName": "BangButton",  "displayName": "Factory Game",     "entryScene": "",         "status": "planned" },
     { "controlName": "HeightA",     "displayName": "Lady Bug",         "entryScene": "",         "status": "planned" },
     { "controlName": "HeightB",     "displayName": "Endless Sisyphus", "entryScene": "",         "status": "planned" },
     { "controlName": "Joystick",    "displayName": "Arcade Prototype", "entryScene": "",         "status": "planned" }
-  ]
+  ],
+  "tuning": {
+    "chargeSeconds": 5.0,
+    "decaySeconds": 1.0,
+    "joystickDeflectThreshold": 0.5,
+    "crankDegreesThreshold": 2.0,
+    "crankActiveTimeout": 0.25,
+    "heightEngageThreshold": 0.5
+  }
 }

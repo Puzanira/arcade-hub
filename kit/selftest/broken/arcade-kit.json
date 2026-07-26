@@ -1,0 +1,14 @@
+{
+  "unityProjectPath": ".",
+  "gameFolder": "Assets/DemoGame",
+  "packageNamePrefix": "com.aigamestudio.game-",
+  "rawInputAllowlist": [
+    { "file": "Scripts/LegacyOverBaseline.cs", "baselineCount": 1 }
+  ],
+  "assetWhitelist": [
+    "DefaultVolumeProfile.asset",
+    "UniversalRenderPipelineGlobalSettings.asset",
+    "Settings",
+    "StreamingAssets"
+  ]
+}
