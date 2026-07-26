@@ -1,6 +1,6 @@
 # Increment: games-integration (этап ② финал)
 
-Status: GATE 1 APPROVED («да, сцепляй», 2026-07-25). ЦЕПНОЙ ночной инкремент:
+Status: LANDED (см. хеш в handoff; гейт 2 основательницы «ок, коммить всё» 2026-07-26).
 стартует ТОЛЬКО после того, как arcade-packaging(home-alone), arcade-packaging
 (life-choices) и hold-to-launch(hub) пройдут скептиков. Гейт 2 утром.
 

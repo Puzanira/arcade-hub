@@ -1,6 +1,6 @@
 # Increment: hold-to-launch (arcade-hub, этап ③)
 
-Status: GATE 1 APPROVED («ок на все три» + «лаунчер с прогресс-баром и заполнением
+Status: LANDED (см. хеш в handoff; гейт 2 основательницы «ок, коммить всё» 2026-07-26).
 экрана объектами», 2026-07-25, ночной прогон). Гейт 2 утром.
 Program: ARCADE_CABINET_SPEC §2.3.
 
