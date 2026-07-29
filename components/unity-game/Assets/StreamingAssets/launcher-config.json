@@ -1,12 +1,13 @@
 {
   "slots": [
-    { "controlName": "Crank",       "displayName": "Endless Sisyphus",          "entryScene": "Packages/com.aigamestudio.game-endless-sisyphus/Scenes/Main", "status": "installed" },
-    { "controlName": "RedButton",   "displayName": "Последняя смена (Factory)", "entryScene": "Boot",                                                        "status": "installed", "nativeInput": true },
-    { "controlName": "GreenButton", "displayName": "Life Choices",              "entryScene": "ThanksNoThanks",                                              "status": "installed" },
-    { "controlName": "BangButton",  "displayName": "Arcade Prototype",          "entryScene": "",                                                            "status": "soon" },
-    { "controlName": "Joystick",    "displayName": "Медитация",                 "entryScene": "",                                                            "status": "soon" },
-    { "controlName": "HeightA",     "displayName": "Lady Bug",                  "entryScene": "Packages/com.aigamestudio.game-lady-bug/Scenes/Main",         "status": "installed", "nativeInput": true },
-    { "controlName": "HeightB",     "displayName": "Home Alone",                "entryScene": "Apartment",                                                   "status": "installed" }
+    { "controlName": "Crank",       "displayName": "Endless Sisyphus",          "entryScene": "Packages/com.aigamestudio.game-endless-sisyphus/Scenes/Main", "status": "installed", "rainSprite": "RainSprites/Boulder" },
+    { "controlName": "RedButton",   "displayName": "Последняя смена (Factory)", "entryScene": "Boot",                                                        "status": "installed", "nativeInput": true, "rainSprite": "RainSprites/MilkBottle" },
+    { "controlName": "GreenButton", "displayName": "Life Choices",              "entryScene": "ThanksNoThanks",                                              "status": "installed", "rainSprite": "RainSprites/ChoiceCard" },
+    { "controlName": "BangButton",  "displayName": "Arcade Prototype",          "entryScene": "",                                                            "status": "soon", "rainSprite": "RainSprites/ArcadeStar" },
+    { "controlName": "Joystick",    "displayName": "Медитация",                 "entryScene": "",                                                            "status": "soon", "rainSprite": "RainSprites/ZenStones" },
+    { "controlName": "HeightA",     "displayName": "Lady Bug",                  "entryScene": "Packages/com.aigamestudio.game-lady-bug/Scenes/Main",         "status": "installed", "nativeInput": true,
+      "rainSprites": ["RainSprites/Flower", "RainSprites/FlowerPink", "RainSprites/FlowerYellow", "RainSprites/FlowerLavender", "RainSprites/DaisyWhite", "RainSprites/DaisyPink", "RainSprites/SunflowerYellow", "RainSprites/LotusYellow", "RainSprites/LotusBlue", "RainSprites/LotusPink"] },
+    { "controlName": "HeightB",     "displayName": "Home Alone",                "entryScene": "Apartment",                                                   "status": "installed", "rainSprite": "RainSprites/CatPaw" }
   ],
   "tuning": {
     "chargeSeconds": 5.0,

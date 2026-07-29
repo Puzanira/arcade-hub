@@ -59,23 +59,23 @@ package moves to GitHub it becomes a git URL pinned to a tag (`…?path=…#<tag
 separate decision recorded in the increment contract. The relative path survives moving the whole
 studio tree.
 
-## The menu
+## The attract screen (former menu)
 
-`HubMenuController` loads `launcher-config.json`, builds one row per slot procedurally (UGUI `Text` on a
-screen-space canvas; font `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")`), and drives a
-`HubMenuModel` cursor:
+The HubMenu scene is an **attract screen** (founder's decision 2026-07-29): a full-screen LOOPING video
+with sound (`AttractVideoScreen`: StreamingAssets/Explainer.mp4 → VideoPlayer → RenderTexture → RawImage
+on a bottom-sorted canvas, letterboxed FitInside; the clip is swappable on the cabinet like the config —
+no rebuild). The old game list, joystick navigation and ALL text are gone; `HubMenuModel` is deleted.
+`HubMenuController` remains the scene's host: it runs the DDOL janitor sweep and builds the video screen.
 
-- **Navigate** — joystick vertical (`ArcadeInput.Joystick.Vector.y`), one move per push (an arm/release
-  latch), wrapping top↔bottom. Input is *polled* (not event subscription) so it survives
-  `ArcadeInput.Initialize` being called again across scene loads/tests.
-- **The highlight is informational only** (name/status browsing). The menu never loads a scene:
-  launching lives exclusively in hold-to-launch (hold/crank a slot's own control to full charge).
-  *Founder's gate-2 decision (2026-07): the old red-button instant-select launched the HIGHLIGHTED row
-  and shadowed charging the red-bound slot — it is removed entirely.*
+- **No text over the video.** The themed sprite rain IS the game hint; the charge bar (bg+fill) only
+  exists while something charges (`charge > 0`), so an idle cabinet shows a clean video frame. The single
+  approved exception (gate-2): the "СКОРО" overlay when a soon-slot reaches full charge.
+- **Launching** lives exclusively in hold-to-launch: every control charges its OWN slot to full.
+  *History: the red-button instant-select (launched the highlighted row) was removed at gate 2 of
+  all-games-wiring; the list + informational highlight followed at attract-video-screen.*
 
-A malformed or missing config logs one clear console error and yields an **empty** menu — the launcher
-still comes up. Each row's text is one-hot (its own unique game name), so a crossed row cannot pass the
-visibility/content tests silently.
+A malformed or missing config logs one clear console error and degrades to an empty slot list — the
+attract screen still comes up (video plays; nothing can charge).
 
 ## Game-scene contract (what TestGame demonstrates)
 
@@ -98,13 +98,15 @@ kit (`ARCADE_INTEGRATION.md` + contract tests + CI) will enforce per repo — se
 
 ## Tests
 
-- **EditMode** — `LauncherConfig` parsing (valid / malformed / empty / installed-vs-planned) and
-  `HubMenuModel` navigation (wrap-around, empty menu, installed/planned selection).
-- **PlayMode** — loads `HubMenu`, takes over input with a `FakeBackend`, asserts all 7 rows are visible
-  by real rect size **and** viewport overlap (a big off-screen rect fails) with correct per-row content,
-  and navigates (highlight only). The `TestGame` rig loop runs through the hold path: a config injected
-  into the scene's real `HoldToLaunchController` binds it to the crank; crank to full → launch, MENU
-  returns, re-enter proves a clean start.
+- **EditMode** — `LauncherConfig` parsing (valid / malformed / empty / installed-vs-planned), the
+  shipped config's founder layout + loadable rain-sprite sets, and the degradation chain (broken JSON →
+  loader error → `HoldToLaunchController` builds with zero slots, no crash). The old `HubMenuModel`
+  navigation tests are gone with the model itself (attract-video-screen).
+- **PlayMode** — `AttractVideoPlayModeTests`: the video plays + loops with an audio track, the themed
+  rain is one-hot per slot (expectations read from the shipped config), and the two contract captures
+  (idle = clean frame, Sisyphus half-charge over the video). The `TestGame` rig loop runs through the
+  hold path: a config injected into the scene's real `HoldToLaunchController` binds it to the crank;
+  crank to full → launch, MENU returns, re-enter proves a clean start.
 
 Run headless (Editor closed):
 

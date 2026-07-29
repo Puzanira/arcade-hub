@@ -11,7 +11,7 @@ namespace AiGameStudio.ArcadeHub.Editor
 {
     /// <summary>
     /// Batch (headless) tooling for the hold-to-launch increment: adds the <see cref="HoldToLaunchController"/>
-    /// to the HubMenu scene, and renders posed screenshots of the charge bar + rain and the "СКОРО" overlay
+    /// to the HubMenu scene, and renders posed screenshots of the charge bar + flower pile and the "СКОРО" overlay
     /// to an offscreen RenderTexture (no window needed). Invoked via <c>-executeMethod</c>.
     /// </summary>
     public static class HubEditorTools
@@ -86,75 +86,62 @@ namespace AiGameStudio.ArcadeHub.Editor
             Debug.Log("[HubEditorTools] Build Settings now has " + EditorBuildSettings.scenes.Length + " scenes.");
         }
 
-        /// <summary>Screenshot: menu with three installed games (3× [PLAY]). Path from -screenshotDir.</summary>
-        public static void CaptureMenu3Play()
-        {
-            string dir = ArgValue("-screenshotDir") ?? Application.temporaryCachePath;
-            CaptureMenuOnly(Path.Combine(dir, "hub-menu-3play.png"));
-        }
+        // NOTE (attract-video-screen): the old CaptureMenu3Play / CaptureMenuOnly tooling is GONE. The game
+        // list it rendered was deleted with the attract-video increment, so it only ever produced a dark
+        // empty frame now — a stale, misleading still. The runtime attract screen is captured by the
+        // AttractVideo PlayMode tests instead (hub-video-idle.png / hub-video-charge.png).
 
-        /// <summary>Screenshot: charge bar at ~50% with a full screen of rain. Path from -screenshotDir.</summary>
+        /// <summary>Screenshot: charge bar at ~50% with the flower pile ~half-filling the screen. Path from -screenshotDir.</summary>
         public static void CaptureCharge50()
         {
             string dir = ArgValue("-screenshotDir") ?? Application.temporaryCachePath;
             CapturePose(Path.Combine(dir, "hub-charge50.png"), slotIndex: 0, charge: 0.5f, comingSoon: false);
         }
 
-        /// <summary>Screenshot: a planned slot at full charge showing the "СКОРО" overlay.</summary>
+        /// <summary>
+        /// Screenshot: the shared launch animation at ~50% charge on the first sprite-backed slot (the Lady
+        /// Bug flower) — the bottom ~half of the screen piled with that game's flower. Writes hub-flower-rain.png.
+        /// </summary>
+        public static void CaptureFlower50()
+        {
+            string dir = ArgValue("-screenshotDir") ?? Application.temporaryCachePath;
+            LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
+            // Pose the first slot carrying a loadable rainSprites SET (the Lady Bug flower set — this
+            // still is the flower-rain still); single-rainSprite slots are posed by CaptureCharge50.
+            int slot = 0;
+            for (int i = 0; i < config.slots.Count; i++)
+            {
+                LauncherSlot s = config.slots[i];
+                bool setLoads = false;
+                if (s.rainSprites != null)
+                    foreach (string p in s.rainSprites)
+                        if (!string.IsNullOrEmpty(p) && Resources.Load<Sprite>(p) != null) { setLoads = true; break; }
+                if (setLoads) { slot = i; break; }
+            }
+            CapturePose(Path.Combine(dir, "hub-flower-rain.png"), slotIndex: slot, charge: 0.5f, comingSoon: false);
+        }
+
+        /// <summary>Screenshot: a planned ("soon") slot at full charge showing the "СКОРО" overlay.</summary>
         public static void CapturePlannedSoon()
         {
             string dir = ArgValue("-screenshotDir") ?? Application.temporaryCachePath;
-            // Slot 2 = "Life Choices" (planned, GreenButton) — violet-ish palette slot.
-            CapturePose(Path.Combine(dir, "hub-planned-soon.png"), slotIndex: 2, charge: 1.0f, comingSoon: true);
-        }
-
-        // Render ONLY the launcher menu (real widgets from the shipped config) to an offscreen texture, so
-        // the still cleanly shows the three installed rows (3× [PLAY]) with no charge overlay on top.
-        private static void CaptureMenuOnly(string path)
-        {
-            const int w = 1920, h = 1080;
-
             LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
 
-            var rt = new RenderTexture(w, h, 24, RenderTextureFormat.ARGB32) { antiAliasing = 1 };
-            rt.Create();
-            var camGO = new GameObject("CaptureCamera", typeof(Camera));
-            var cam = camGO.GetComponent<Camera>();
-            cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = new Color(0.05f, 0.06f, 0.10f, 1f);
-            cam.fieldOfView = 60f;
-            cam.nearClipPlane = 0.1f;
-            cam.farClipPlane = 100f;
-            cam.targetTexture = rt;
-            camGO.transform.position = new Vector3(0f, 0f, -10f);
+            // Derive the soon-slot from the SHIPPED config — never a hardcoded index. (The old hardcoded
+            // slot 2 is now "Life Choices", an INSTALLED game, so it forced a wrong "СКОРО" overlay onto a
+            // real game.) The first non-installed slot is the honest planned example.
+            int slot = -1;
+            for (int i = 0; i < config.slots.Count; i++)
+                if (!config.slots[i].IsInstalled) { slot = i; break; }
 
-            var menuGO = new GameObject("CaptureMenu", typeof(HubMenuController));
-            var menu = menuGO.GetComponent<HubMenuController>();
-            menu.InitializeWith(config);
-            RetargetCanvas(menuGO.GetComponentInChildren<Canvas>(), cam, 20f);
+            if (slot < 0)
+            {
+                Debug.LogError("[HubEditorTools] No planned (\"soon\") slot in the shipped config — nothing to pose.");
+                EditorApplication.Exit(3);
+                return;
+            }
 
-            Canvas.ForceUpdateCanvases();
-            cam.Render();
-
-            var prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
-            tex.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-            tex.Apply();
-            RenderTexture.active = prev;
-
-            int magenta = 0;
-            Color32[] px = tex.GetPixels32();
-            for (int i = 0; i < px.Length; i++)
-                if (px[i].r > 220 && px[i].g < 40 && px[i].b > 220) magenta++;
-
-            Directory.CreateDirectory(Path.GetDirectoryName(path));
-            File.WriteAllBytes(path, tex.EncodeToPNG());
-            Debug.Log($"[HubEditorTools] Wrote screenshot '{path}' ({w}x{h}); magentaPixels={magenta}");
-
-            Object.DestroyImmediate(tex);
-            cam.targetTexture = null;
-            rt.Release();
+            CapturePose(Path.Combine(dir, "hub-planned-soon.png"), slotIndex: slot, charge: 1.0f, comingSoon: true);
         }
 
         private static void CapturePose(string path, int slotIndex, float charge, bool comingSoon)
@@ -177,11 +164,8 @@ namespace AiGameStudio.ArcadeHub.Editor
             cam.targetTexture = rt;
             camGO.transform.position = new Vector3(0f, 0f, -10f);
 
-            // Menu background (real widgets), retargeted to the capture camera.
-            var menuGO = new GameObject("CaptureMenu", typeof(HubMenuController));
-            var menu = menuGO.GetComponent<HubMenuController>();
-            menu.InitializeWith(config);
-            RetargetCanvas(menuGO.GetComponentInChildren<Canvas>(), cam, 20f);
+            // attract-video-screen: no menu background any more (the runtime backdrop is the video,
+            // which cannot decode in an edit-mode pose) — the dark camera clear stands in.
 
             // Hold-to-launch overlay, posed.
             var htlGO = new GameObject("CaptureHTL", typeof(HoldToLaunchController));

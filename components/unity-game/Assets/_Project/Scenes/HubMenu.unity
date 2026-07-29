@@ -150,8 +150,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e635a5122e34d4c63b83f572d4c2c34a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: AiGameStudio.ArcadeHub::AiGameStudio.ArcadeHub.HubMenuController
-  navPushThreshold: 0.5
-  navReleaseThreshold: 0.25
 --- !u!114 &369001656
 MonoBehaviour:
   m_ObjectHideFlags: 0

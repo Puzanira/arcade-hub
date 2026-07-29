@@ -117,6 +117,20 @@ ARCHITECTURE.md обновлён (меню = навигация, hold-to-launch 
 runner сторожка. Для ArcadeInput-нативных игр (Sisyphus/Home Alone/Life Choices) — как было:
 тест качает сам, замещая насос самой игры.
 
+**Тематический дождь для шести слотов (гейт-2 волна, «теряюсь, что запускаем»).** Lady Bug
+(HeightA, цветы) — у параллельного owner'а, не тронут. Остальные шесть слотов получили
+силуэтные спрайты, сгенерированные детерминированным editor-скриптом
+(`Assets/_Project/Editor/RainSpriteGenerator.cs`, SDF-растеризация в PNG 512×512, прозрачный
+фон, меню Hub → Generate Themed Rain Sprites): Crank=валун со сколами (Boulder),
+Red=молочная бутылка (MilkBottle), Green=карточка с «?» (ChoiceCard), Bang=звезда платформера
+(ArcadeStar), Joystick=стопка дзен-камушков (ZenStones — выбран вариант «камушки», чище
+читается силуэтом), HeightB=кошачья лапка (CatPaw). Привязка через `rainSprite` в конфиге
+(механизм параллельного инкремента, fallback-плашка на битый путь сохранена). Новый
+EditMode-тест: все 7 слотов несут rain-спрайты И каждый путь реально грузится из Resources
+(опечатка в пути = красный тест, не тихий fallback). Скрин: hub-themed-rain.png (заряженный
+Crank-слот, валуны сыпятся). HubEditorTools.cs параллельного owner'а не изменялся —
+скрин-капча продублирована в своём файле.
+
 **Известные мелочи v0.** Серийный ридер Factory деградирует без железа. Скриншоты (0 мадженты,
 не пустые): hub-menu-5play, hub-into-sisyphus, hub-into-factory, hub-into-ladybug
-(+ homealone/lifechoices) в scratchpad.
+(+ homealone/lifechoices), hub-themed-rain в scratchpad.

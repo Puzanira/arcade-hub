@@ -274,8 +274,7 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsNotNull(htl, "HoldToLaunchController must be wired into the HubMenu scene.");
             htl.AutoTick = false;
 
-            var menu = UnityEngine.Object.FindAnyObjectByType<HubMenuController>();
-            Assert.AreEqual(0, menu.SelectedIndex, "Cursor starts on slot 0 (Sisyphus) — the bug's setup.");
+            // (attract screen: there is no cursor at all any more — a red press has nothing to "select".)
 
             // Hold RED for ~1s of fixed dt: far past any instant edge, far short of the 5s full charge.
             var red = new BackendSnapshot { RedHeld = true };
@@ -304,29 +303,8 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.AreEqual(0f, htl.Charge, 1e-3, "Released early, the charge decays to zero — nothing launched.");
         }
 
-        // ---------------- Menu screenshot (5× [PLAY]) ----------------
-
-        [UnityTest]
-        public IEnumerator Capture_HubMenu_ShowsFiveInstalledGames()
-        {
-            yield return SceneManager.LoadSceneAsync(HubScenes.HubMenu, LoadSceneMode.Single);
-            yield return null;
-            yield return null;
-
-            var menu = UnityEngine.Object.FindAnyObjectByType<HubMenuController>();
-            Assert.IsNotNull(menu, "HubMenuController present.");
-
-            int playRows = 0, soonRows = 0;
-            for (int i = 0; i < menu.RowCount; i++)
-            {
-                if (menu.Rows[i].text.Contains("[ PLAY ]")) playRows++;
-                if (menu.Rows[i].text.Contains("[ soon ]")) soonRows++;
-            }
-            Assert.AreEqual(5, playRows, "Five menu rows are installed and show [ PLAY ].");
-            Assert.AreEqual(2, soonRows, "Two menu rows are 'soon'.");
-
-            yield return TryCapture("hub-menu-5play.png");
-        }
+        // (The old 5×[PLAY] menu screenshot test left with the list — the attract screen's video/rain
+        // captures live in AttractVideoPlayModeTests.)
 
         // -------- screenshot helper (mirrors the packaging screenshot harness) --------
 

@@ -22,6 +22,24 @@ namespace AiGameStudio.ArcadeHub
         public string status;
 
         /// <summary>
+        /// Optional per-slot sprite for the shared launch animation (the falling-and-piling grid in
+        /// <see cref="HoldToLaunchController"/>): a <c>Resources.Load</c> path to a Sprite, e.g.
+        /// "RainSprites/Flower". Empty falls back to a solid slot-coloured tile. Named for the
+        /// animation's "rain of sprites" visual. Prefer <see cref="rainSprites"/> for a set; this single
+        /// field stays for config backward-compatibility and is used only when the array is empty.
+        /// </summary>
+        public string rainSprite;
+
+        /// <summary>
+        /// Optional per-slot sprite SET for the shared launch animation — each falling object picks one
+        /// at random, exactly like the Lady Bug intro this animation was adapted from mixed its ten
+        /// flower sprites. Takes precedence over <see cref="rainSprite"/> when non-empty. The Lady Bug
+        /// slot ships that game's own ten flowers; themed sets for the other slots arrive later from
+        /// their manifests.
+        /// </summary>
+        public string[] rainSprites;
+
+        /// <summary>
         /// True for games that DON'T read input through <see cref="AiGameStudio.ArcadeControls.ArcadeInput"/>
         /// (native/legacy input — e.g. Lady Bug on the old Input Manager, Factory on the raw new Input System).
         /// Such a game never pumps ArcadeInput, so the launcher's return watchdog would see a frozen MenuButton.

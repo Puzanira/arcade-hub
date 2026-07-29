@@ -102,6 +102,32 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsFalse(config.slots.Find(s => s.displayName == "Endless Sisyphus").nativeInput, "Sisyphus pumps ArcadeInput itself.");
         }
 
+        [Test]
+        public void ShippedConfig_EverySlotCarriesALoadableRainSpriteSet()
+        {
+            // Founder's gate-2 wave: "по прямоугольникам не понятно, что запускается" — every slot rains
+            // themed sprites. Each declared Resources path must actually LOAD (a typo'd path would silently
+            // fall back to the solid tile; the runtime fallback stays, but the shipped config must be clean).
+            LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
+            Assert.AreEqual(7, config.slots.Count);
+
+            foreach (LauncherSlot slot in config.slots)
+            {
+                bool hasSet = slot.rainSprites != null && slot.rainSprites.Length > 0;
+                bool hasSingle = !string.IsNullOrEmpty(slot.rainSprite);
+                Assert.IsTrue(hasSet || hasSingle,
+                    $"Slot '{slot.displayName}' must declare rainSprites or rainSprite.");
+
+                if (hasSet)
+                    foreach (string path in slot.rainSprites)
+                        Assert.IsNotNull(Resources.Load<Sprite>(path),
+                            $"Slot '{slot.displayName}': rainSprites path '{path}' must load from Resources.");
+                else
+                    Assert.IsNotNull(Resources.Load<Sprite>(slot.rainSprite),
+                        $"Slot '{slot.displayName}': rainSprite path '{slot.rainSprite}' must load from Resources.");
+            }
+        }
+
         private static void AssertInstalledOn(LauncherConfig config, string control, string displayName)
         {
             LauncherSlot slot = config.slots.Find(s => s.controlName == control);
@@ -111,23 +137,26 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [Test]
-        public void BrokenFile_ToLoader_ToMenuController_ComesUpWithZeroRows_NoCrash()
+        public void BrokenFile_ToLoader_ToHoldToLaunch_ComesUpEmpty_NoCrash()
         {
-            // The full done-contract #2 chain: broken JSON on disk -> loader degrades with one
-            // console error -> the menu controller builds an EMPTY menu instead of crashing.
+            // The degradation chain on the attract screen (the game list is gone — hold-to-launch is the
+            // only config consumer on screen): broken JSON on disk -> loader degrades with one console
+            // error -> the hold-to-launch stack builds with ZERO slots instead of crashing.
             string path = WriteTempConfig(@"{ ""slots"": [ { ""displayName"": ");
 
             LogAssert.Expect(LogType.Error, LoadErrorPattern);
             LauncherConfig config = LauncherConfigLoader.LoadFrom(path);
 
-            var go = new GameObject("HubMenuUnderTest");
+            var go = new GameObject("HoldToLaunchUnderTest");
             try
             {
-                var menu = go.AddComponent<HubMenuController>();
-                menu.InitializeWith(config); // must not throw
+                var htl = go.AddComponent<HoldToLaunchController>();
+                htl.InitializeWith(config); // must not throw
 
-                Assert.AreEqual(0, menu.RowCount, "Empty config must yield an empty menu (zero rows).");
-                Assert.AreEqual(0, menu.SelectedIndex);
+                Assert.AreEqual(0f, htl.Charge, 1e-6f, "Empty config: nothing can charge.");
+                Assert.AreEqual(-1, htl.ActiveSlot, "Empty config: no active slot.");
+                Assert.AreEqual(0, htl.FlowerCount, "Empty config: nothing piled.");
+                htl.Tick(0.1f); // a frame with zero slots must not throw either
             }
             finally
             {

@@ -13,7 +13,8 @@ namespace AiGameStudio.ArcadeHub.Tests
     /// <summary>
     /// Drives the hold-to-launch loop headless with a <see cref="FakeBackend"/>, injecting input frame by
     /// frame and advancing the controller with a fixed dt (AutoTick off) for determinism:
-    /// the charge bar grows visibly and spawns rain; releasing decays the charge and clears the rain;
+    /// the charge bar grows visibly and piles the flower grid in proportion to the charge; releasing
+    /// decays the charge and clears the pile;
     /// cranking the installed Sisyphus slot (Crank, slot 0 in the founder's layout) to full launches
     /// Endless Sisyphus; holding a planned slot to full shows the "СКОРО" overlay and resets without launching.
     /// </summary>
@@ -81,7 +82,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [UnityTest]
-        public IEnumerator Charge_GrowsVisiblyWithRain_ThenDecaysAndClears()
+        public IEnumerator Charge_GrowsVisiblyWithFlowers_ThenDecaysAndClears()
         {
             yield return LoadMenuAndTakeOver();
 
@@ -96,21 +97,26 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.AreEqual(0, _htl.ActiveSlot, "the crank-bound Sisyphus slot is charging");
             AssertRectOnScreen(_htl.BarFill, "Charge bar fill at ~50%");
             Assert.Greater(_htl.BarFill.rect.width, widthAtZero + 100f, "the bar fill grew visibly");
-            Assert.Greater(_htl.RainCount, 0, "rain should be falling while charging");
-            // At least one drop is visibly on-screen (rain is falling). We don't pin the OLDEST drop: it
-            // sits at the bottom cull edge with an unseeded-random spawn Y, so it straddles the screen edge.
-            bool anyDropOnScreen = false;
-            foreach (var drop in _htl.RainDrops)
-                if (IsRectOnScreen(drop)) { anyDropOnScreen = true; break; }
-            Assert.IsTrue(anyDropOnScreen, "At least one rain drop must be visibly on-screen while charging.");
+            Assert.Greater(_htl.FlowerCount, 0, "flowers should be piling while charging");
+            // Proportion: the pile covers ~charge of the grid capacity (bottom row up). At ~50% charge it
+            // is roughly half full — the launch animation's whole point is "screen filled in proportion".
+            int cap = _htl.FlowerCapacity;
+            Assert.Greater(_htl.FlowerCount, (int)(0.30f * cap), "at ~50% charge the pile is well past empty");
+            Assert.Less(_htl.FlowerCount, (int)(0.70f * cap), "at ~50% charge the pile is well short of full");
+            // At least one sprite is visibly on-screen (the pile grew from the bottom row up).
+            bool anyFlowerOnScreen = false;
+            foreach (var flower in _htl.Flowers)
+                if (IsRectOnScreen(flower)) { anyFlowerOnScreen = true; break; }
+            Assert.IsTrue(anyFlowerOnScreen, "At least one piled flower must be visibly on-screen while charging.");
+            AssertRectOnScreen(_htl.FirstFlower, "First (bottom-row) flower at ~50% charge");
 
-            // Release: crank stops. Decay over ~1s plus the crank timeout -> back to empty, rain cleared.
+            // Release: crank stops. Decay over ~1s plus the crank timeout -> back to empty, pile cleared.
             for (int i = 0; i < 20; i++)
                 yield return Step(Neutral, 0.1f);
 
             Assert.AreEqual(0f, _htl.Charge, 1e-3, "released charge decays fully to 0");
             Assert.AreEqual(-1, _htl.ActiveSlot, "slot dropped after full decay");
-            Assert.AreEqual(0, _htl.RainCount, "rain clears as the charge decays");
+            Assert.AreEqual(0, _htl.FlowerCount, "the flower pile clears as the charge decays");
         }
 
         [UnityTest]
