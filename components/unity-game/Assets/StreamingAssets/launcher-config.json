@@ -1,12 +1,12 @@
 {
   "slots": [
-    { "controlName": "Crank",       "displayName": "Test Game",        "entryScene": "TestGame", "status": "installed" },
-    { "controlName": "RedButton",   "displayName": "Home Alone",       "entryScene": "Apartment",     "status": "installed" },
-    { "controlName": "GreenButton", "displayName": "Life Choices",     "entryScene": "ThanksNoThanks", "status": "installed" },
-    { "controlName": "BangButton",  "displayName": "Factory Game",     "entryScene": "",         "status": "planned" },
-    { "controlName": "HeightA",     "displayName": "Lady Bug",         "entryScene": "",         "status": "planned" },
-    { "controlName": "HeightB",     "displayName": "Endless Sisyphus", "entryScene": "",         "status": "planned" },
-    { "controlName": "Joystick",    "displayName": "Arcade Prototype", "entryScene": "",         "status": "planned" }
+    { "controlName": "Crank",       "displayName": "Endless Sisyphus",          "entryScene": "Packages/com.aigamestudio.game-endless-sisyphus/Scenes/Main", "status": "installed" },
+    { "controlName": "RedButton",   "displayName": "Последняя смена (Factory)", "entryScene": "Boot",                                                        "status": "installed", "nativeInput": true },
+    { "controlName": "GreenButton", "displayName": "Life Choices",              "entryScene": "ThanksNoThanks",                                              "status": "installed" },
+    { "controlName": "BangButton",  "displayName": "Arcade Prototype",          "entryScene": "",                                                            "status": "soon" },
+    { "controlName": "Joystick",    "displayName": "Медитация",                 "entryScene": "",                                                            "status": "soon" },
+    { "controlName": "HeightA",     "displayName": "Lady Bug",                  "entryScene": "Packages/com.aigamestudio.game-lady-bug/Scenes/Main",         "status": "installed", "nativeInput": true },
+    { "controlName": "HeightB",     "displayName": "Home Alone",                "entryScene": "Apartment",                                                   "status": "installed" }
   ],
   "tuning": {
     "chargeSeconds": 5.0,

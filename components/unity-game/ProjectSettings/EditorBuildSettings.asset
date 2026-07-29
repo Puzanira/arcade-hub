@@ -17,5 +17,23 @@ EditorBuildSettings:
   - enabled: 1
     path: Packages/com.aigamestudio.game-life-choices/Scenes/ThanksNoThanks.unity
     guid: 569f2a8c80a05453fb795ed88a28f20d
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-endless-sisyphus/Scenes/Main.unity
+    guid: 5de587a61718545c69588325f116a8cd
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-factory/Scenes/Boot.unity
+    guid: 34298c193d6f44b868a2971849e50ac5
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-factory/Scenes/Level_01_RawMilkIntake.unity
+    guid: 4ff4ecdd3c0a04c9e8069be59d1fb78b
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-factory/Scenes/Level_02_PackagingLine.unity
+    guid: 886476c7a6af942d1afb8406205feedd
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-factory/Scenes/Level_03_ColdStorage.unity
+    guid: 03f244179b88a48ea98e38a51cb7d78a
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-lady-bug/Scenes/Main.unity
+    guid: 02b4195a87e544e4ab51778fd5982897
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

@@ -6,6 +6,9 @@
         "AiGameStudio.ArcadeControls",
         "HomeAlone.Runtime",
         "ThanksNoThanks.Runtime",
+        "EndlessSisyphus.Runtime",
+        "FactoryGame.Runtime",
+        "LadyBug.Runtime",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "UnityEngine.UI"

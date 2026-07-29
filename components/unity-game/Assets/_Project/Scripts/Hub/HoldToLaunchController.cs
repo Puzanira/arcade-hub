@@ -68,6 +68,8 @@ namespace AiGameStudio.ArcadeHub
         public int ActiveSlot => _machine?.ActiveSlot ?? -1;
         public int RainCount => _rain.Count;
         public RectTransform FirstRainDrop => _rain.Count > 0 ? _rain[0] : null;
+        /// <summary>All live rain drops (test seam: assert at least one is visibly on-screen).</summary>
+        public IReadOnlyList<RectTransform> RainDrops => _rain;
         public RectTransform BarFill => _barFill;
         public Text ComingSoonLabel => _comingSoon;
         public bool ComingSoonVisible => _comingSoon != null && _comingSoon.gameObject.activeSelf;
@@ -117,7 +119,7 @@ namespace AiGameStudio.ArcadeHub
                 // External games reset in place on MenuButton but don't know the hub's menu scene, so the
                 // launcher arms a return watchdog. The built-in TestGame returns to the menu itself.
                 if (slot.entryScene != HubScenes.TestGame)
-                    LauncherReturn.ArmFor(HubScenes.HubMenu);
+                    LauncherReturn.ArmFor(HubScenes.HubMenu, slot.nativeInput);
                 SceneManager.LoadScene(slot.entryScene);
                 return;
             }

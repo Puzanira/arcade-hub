@@ -9,6 +9,24 @@
         "com.unity.ugui": "2.5.0"
       }
     },
+    "com.aigamestudio.game-endless-sisyphus": {
+      "version": "file:../../../../../external/EndlessSisyphusUnity/Assets/EndlessSisyphus",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {
+        "com.aigamestudio.arcade-controls": "0.1.0"
+      }
+    },
+    "com.aigamestudio.game-factory": {
+      "version": "file:../../../../../external/factory_game/Assets/FactoryGame",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {
+        "com.unity.inputsystem": "1.19.0",
+        "com.unity.render-pipelines.universal": "17.6.0",
+        "com.unity.ugui": "2.5.0"
+      }
+    },
     "com.aigamestudio.game-home-alone": {
       "version": "file:../../../../home-alone/components/unity-game/Assets/_Project",
       "depth": 0,
@@ -16,6 +34,12 @@
       "dependencies": {
         "com.aigamestudio.arcade-controls": "0.1.0"
       }
+    },
+    "com.aigamestudio.game-lady-bug": {
+      "version": "file:../../../../../external/lady_bug/UnityProject/Assets/LadyBug",
+      "depth": 0,
+      "source": "local",
+      "dependencies": {}
     },
     "com.aigamestudio.game-life-choices": {
       "version": "file:../../../../life-choices/components/unity-game/Assets/_Project",

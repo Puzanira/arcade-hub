@@ -62,29 +62,52 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [Test]
-        public void ShippedConfig_HasExactlyThreeInstalledSlots_WithGameEntryScenes()
+        public void ShippedConfig_MatchesFoundersLayout_FiveInstalled_TwoSoon_NoTestGame()
         {
-            // games-integration: the launcher ships THREE installed slots — the built-in Test Game plus the
-            // two packaged games — each with a real entry scene; every other slot is still planned.
+            // all-games-wiring (founder's layout 2026-07-26): FIVE installed games, TWO "soon" placeholders,
+            // and NO built-in Test Game slot (its scene/rig stay in the project but leave the launcher menu).
             LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
 
-            int installed = 0;
+            int installed = 0, soon = 0;
             foreach (LauncherSlot s in config.slots)
+            {
                 if (s.IsInstalled) installed++;
-            Assert.AreEqual(3, installed,
-                "Test Game + Home Alone + Life Choices are installed; the remaining slots are planned.");
+                else soon++;
+            }
+            Assert.AreEqual(7, config.slots.Count, "Seven cabinet controls -> seven slots.");
+            Assert.AreEqual(5, installed, "Sisyphus, Factory, Life Choices, Lady Bug, Home Alone are installed.");
+            Assert.AreEqual(2, soon, "Arcade Prototype and Медитация are still 'soon'.");
 
-            LauncherSlot testGame = config.slots.Find(s => s.displayName == "Test Game");
-            LauncherSlot homeAlone = config.slots.Find(s => s.displayName == "Home Alone");
-            LauncherSlot lifeChoices = config.slots.Find(s => s.displayName == "Life Choices");
+            Assert.IsNull(config.slots.Find(s => s.displayName == "Test Game"),
+                "Test Game must NOT appear in the shipped launcher menu.");
 
-            Assert.IsNotNull(homeAlone, "Home Alone slot present.");
-            Assert.IsNotNull(lifeChoices, "Life Choices slot present.");
-            Assert.IsTrue(testGame.IsInstalled, "Test Game stays installed.");
-            Assert.IsTrue(homeAlone.IsInstalled, "Home Alone is now installed.");
-            Assert.IsTrue(lifeChoices.IsInstalled, "Life Choices is now installed.");
-            Assert.AreEqual("Apartment", homeAlone.entryScene, "Home Alone loads its Apartment entry scene.");
-            Assert.AreEqual("ThanksNoThanks", lifeChoices.entryScene, "Life Choices loads its ThanksNoThanks entry scene.");
+            // Each installed game sits on its founder-assigned control with a real entry scene.
+            AssertInstalledOn(config, "Crank",       "Endless Sisyphus");
+            AssertInstalledOn(config, "RedButton",   "Последняя смена (Factory)");
+            AssertInstalledOn(config, "GreenButton", "Life Choices");
+            AssertInstalledOn(config, "HeightA",     "Lady Bug");
+            AssertInstalledOn(config, "HeightB",     "Home Alone");
+
+            // The two "soon" slots are placeholders — planned control bindings, no entry scene.
+            LauncherSlot bang = config.slots.Find(s => s.controlName == "BangButton");
+            LauncherSlot joy = config.slots.Find(s => s.controlName == "Joystick");
+            Assert.AreEqual("Arcade Prototype", bang.displayName);
+            Assert.AreEqual("Медитация", joy.displayName);
+            Assert.IsFalse(bang.IsInstalled, "Arcade Prototype is a 'soon' placeholder.");
+            Assert.IsFalse(joy.IsInstalled, "Медитация is a 'soon' placeholder.");
+
+            // Native-input games (legacy/raw input) carry the pump flag so the return watchdog stays live.
+            Assert.IsTrue(config.slots.Find(s => s.displayName == "Lady Bug").nativeInput, "Lady Bug is native-input.");
+            Assert.IsTrue(config.slots.Find(s => s.displayName == "Последняя смена (Factory)").nativeInput, "Factory is native-input.");
+            Assert.IsFalse(config.slots.Find(s => s.displayName == "Endless Sisyphus").nativeInput, "Sisyphus pumps ArcadeInput itself.");
+        }
+
+        private static void AssertInstalledOn(LauncherConfig config, string control, string displayName)
+        {
+            LauncherSlot slot = config.slots.Find(s => s.controlName == control);
+            Assert.IsNotNull(slot, $"Slot bound to {control} present.");
+            Assert.AreEqual(displayName, slot.displayName, $"{control} launches {displayName}.");
+            Assert.IsTrue(slot.IsInstalled, $"{displayName} is installed with a real entry scene.");
         }
 
         [Test]
@@ -105,7 +128,6 @@ namespace AiGameStudio.ArcadeHub.Tests
 
                 Assert.AreEqual(0, menu.RowCount, "Empty config must yield an empty menu (zero rows).");
                 Assert.AreEqual(0, menu.SelectedIndex);
-                Assert.IsFalse(menu.PlaceholderVisible, "No placeholder should show on an empty menu.");
             }
             finally
             {

@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine;
@@ -10,38 +9,50 @@ using UnityEngine.TestTools;
 using UnityEngine.UI;
 using AiGameStudio.ArcadeControls;
 using AiGameStudio.ArcadeHub;
-using HomeAlone;
-using ThanksNoThanks;
 
 namespace AiGameStudio.ArcadeHub.Tests
 {
     /// <summary>
-    /// games-integration (stage ②): the launcher now runs the two REAL packaged games. Drives the whole
-    /// loop headless with a <see cref="FakeBackend"/> — menu → game scene → back to the menu → game again —
-    /// for Home Alone (RedButton) and Life Choices (GreenButton, via the hold-to-launch charge), proving
-    /// each game's scene loads with its controller alive, that MenuButton hands control back to the
-    /// launcher (the <see cref="LauncherReturn"/> watchdog, since a packaged game doesn't know the hub's
-    /// menu scene), and that a second entry is a clean start.
+    /// all-games-wiring (founder's layout 2026-07-26): the launcher runs FIVE real games. Drives the whole
+    /// loop headless with a <see cref="FakeBackend"/> — menu → game scene → back to the menu — for every
+    /// installed slot, entering each the ONLY way the cabinet launches (founder's gate-2 decision:
+    /// instant-select is gone): holding/cranking the slot's OWN control until the hold-to-launch charge
+    /// reaches full. Each case proves the game's scene loads with a live root object (its own namespace),
+    /// that the launcher armed its <see cref="LauncherReturn"/> watchdog (a packaged game does not know
+    /// the hub's menu scene), and that the MenuButton exit gesture hands the cabinet back.
     ///
-    /// When run WITH graphics (no -nographics) each test also captures a 1920×1080 PNG of the running game
-    /// to <c>HUB_SHOT_DIR</c> and asserts zero magenta (no missing shaders/sprites). Under -nographics the
+    /// External games play with their NATIVE input; the launcher's universal MenuButton return works even
+    /// for the two that never pump ArcadeInput (Lady Bug on the legacy Input Manager, Factory on the raw new
+    /// Input System) because the watchdog carries its own input pump for <see cref="LauncherSlot.nativeInput"/>
+    /// slots. Sisyphus / Home Alone / Life Choices pump ArcadeInput themselves.
+    ///
+    /// When run WITH graphics (no -nographics) each game case captures a 1920×1080 PNG of the running game to
+    /// <c>HUB_SHOT_DIR</c> and asserts zero magenta (no missing shaders/sprites). Under -nographics the
     /// capture is skipped — cam.Render() would hard-crash the batch editor — and only the loop is asserted.
     /// </summary>
     public class GamesIntegrationPlayModeTests
     {
         private FakeBackend _fake;
 
-        private static BackendSnapshot RedHeld => new BackendSnapshot { RedHeld = true };
-        private static BackendSnapshot GreenHeld => new BackendSnapshot { GreenHeld = true };
         private static BackendSnapshot MenuHeld => new BackendSnapshot { MenuHeld = true };
-        private static BackendSnapshot JoyDown => new BackendSnapshot { Joystick = new Vector2(0f, -1f) };
         private static readonly BackendSnapshot Neutral = default;
 
+        // The five installed slots' OWN controls in the shipped founder layout — the launch gesture is
+        // "engage this control until the charge is full" (the only launch path).
+        private static BackendSnapshot HoldSisyphus => new BackendSnapshot { CrankDeltaDegrees = 10f }; // Crank
+        private static BackendSnapshot HoldFactory => new BackendSnapshot { RedHeld = true };           // RedButton
+        private static BackendSnapshot HoldLifeChoices => new BackendSnapshot { GreenHeld = true };     // GreenButton
+        private static BackendSnapshot HoldLadyBug => new BackendSnapshot { HeightA = 1f };             // HeightA
+        private static BackendSnapshot HoldHomeAlone => new BackendSnapshot { HeightB = 1f };           // HeightB
+
         // Replace whatever backend the current scene's runner installed with a code-driven fake we pump.
+        // NEVER destroys the watchdog's own runner: for nativeInput games it is the production return path
+        // and killing it would fake the proof (use ExitToMenuViaWatchdogRunner there, not this).
         private void TakeOverInput()
         {
-            var runner = UnityEngine.Object.FindAnyObjectByType<ArcadeInputRunner>();
-            if (runner != null) UnityEngine.Object.DestroyImmediate(runner);
+            foreach (var r in UnityEngine.Object.FindObjectsByType<ArcadeInputRunner>(FindObjectsSortMode.None))
+                if (LauncherReturn.Instance == null || r.gameObject != LauncherReturn.Instance.gameObject)
+                    UnityEngine.Object.DestroyImmediate(r);
             _fake = new FakeBackend();
             ArcadeInput.Initialize(_fake);
         }
@@ -65,93 +76,196 @@ namespace AiGameStudio.ArcadeHub.Tests
             yield return null; // let the new scene's Awake/Start settle
         }
 
-        private IEnumerator NavDown()
+        // Enter a game the ONLY way the cabinet launches: hold/crank the slot's own control and drive the
+        // hold-to-launch charge to full (AutoTick off, fixed dt for determinism). No cursor, no select
+        // button — the menu highlight is informational and cannot launch anything.
+        private IEnumerator EnterByHold(BackendSnapshot heldControl, string sceneName)
         {
-            Push(JoyDown); yield return null; yield return null; // move once and latch
-            Push(Neutral); yield return null; yield return null; // re-arm for the next push
-        }
+            var htl = UnityEngine.Object.FindAnyObjectByType<HoldToLaunchController>();
+            Assert.IsNotNull(htl, "HoldToLaunchController must be wired into the HubMenu scene.");
+            htl.AutoTick = false;
 
-        // Enter Home Alone from the menu: highlight its row (slot 1) and press its bound RedButton. RED is
-        // the menu's select control (hub-v0 instant-select coexists with hold-to-launch), so the highlighted
-        // installed slot launches — Home Alone's own control launching Home Alone, from the menu.
-        private IEnumerator EnterHomeAlone()
-        {
-            yield return NavDown(); // slot 0 (Test Game) -> slot 1 (Home Alone)
-            Push(RedHeld);
-            yield return WaitForActiveScene("Apartment", 180);
-        }
-
-        // Enter Life Choices via the genuine hold-to-launch charge on its bound GreenButton (a control the
-        // menu does NOT consume): crank the charge to full and the controller loads the scene.
-        private IEnumerator EnterLifeChoices(HoldToLaunchController htl)
-        {
             int guard = 0;
-            while (SceneManager.GetActiveScene().name != "ThanksNoThanks" && guard < 200)
+            while (SceneManager.GetActiveScene().name != sceneName && guard < 200)
             {
-                _fake.Next = GreenHeld;
+                _fake.Next = heldControl;
                 ArcadeInput.Update(0.1f);
                 htl.Tick(0.1f);
                 yield return null;
                 guard++;
             }
-            yield return WaitForActiveScene("ThanksNoThanks", 5);
+            yield return WaitForActiveScene(sceneName, 5);
         }
 
-        // The MenuButton exit gesture the launcher's return watchdog requires: a SEEN release (+ warmup),
-        // then a fresh press. Matches Home Alone's own exit contract; a plain edge (Life Choices) passes too.
+        // The MenuButton exit gesture the watchdog requires: a SEEN release (+ warmup), then a fresh
+        // press. For ArcadeInput-NATIVE games only — here the test pumps ArcadeInput itself, standing in
+        // for the game's own per-frame pump (Sisyphus/Home Alone/Life Choices pump ArcadeInput.Update).
         private IEnumerator ExitToMenuByMenuButton()
         {
             for (int i = 0; i < 4; i++) { Push(Neutral); yield return null; } // release seen + warmup
             Push(MenuHeld);
-            yield return WaitForActiveScene(HubScenes.HubMenu, 180);
+            yield return WaitForActiveScene(HubScenes.HubMenu, 240);
         }
 
-        // ---------------- Home Alone ----------------
+        // The SAME exit gesture for nativeInput games (Lady Bug, Factory), driven HONESTLY through the
+        // production path: those games never pump ArcadeInput, so the watchdog's own ArcadeInputRunner
+        // (attached by LauncherReturn.ArmFor for nativeInput slots) is the ONLY pump. The test must NOT
+        // destroy it and must NOT call ArcadeInput.Update itself — it only swaps the backend for a fake
+        // and lets the LIVE runner poll it each frame, exactly as the keyboard is polled on the cabinet.
+        private IEnumerator ExitToMenuViaWatchdogRunner()
+        {
+            Assert.IsNotNull(LauncherReturn.Instance, "The return watchdog must be alive inside the game.");
+            var runner = LauncherReturn.Instance.GetComponent<ArcadeInputRunner>();
+            Assert.IsNotNull(runner,
+                "A nativeInput slot's watchdog must carry its own ArcadeInputRunner (the game never pumps ArcadeInput).");
 
-        [UnityTest]
-        public IEnumerator HomeAlone_LaunchesFromMenu_ReturnsByMenuButton_ReentersClean()
+            _fake = new FakeBackend();               // swap the backend only; the runner keeps pumping
+            ArcadeInput.Initialize(_fake);
+            _fake.Next = Neutral;
+            for (int i = 0; i < 4; i++) yield return null; // release SEEN via the live runner's pump
+
+            _fake.Next = MenuHeld;                   // fresh press — again read by the runner, not by us
+            yield return WaitForActiveScene(HubScenes.HubMenu, 240);
+        }
+
+        // -------- DDOL inspection (the hub's janitor must sweep leaked external singletons) --------
+
+        private static void AssertNoDdolObjectsFrom(string ns, string because)
+        {
+            var probe = new GameObject("~DdolProbe");
+            UnityEngine.Object.DontDestroyOnLoad(probe);
+            try
+            {
+                foreach (GameObject root in probe.scene.GetRootGameObjects())
+                {
+                    if (root == probe) continue;
+                    foreach (MonoBehaviour mb in root.GetComponentsInChildren<MonoBehaviour>(true))
+                    {
+                        if (mb == null) continue;
+                        string tns = mb.GetType().Namespace;
+                        if (tns != null && (tns == ns || tns.StartsWith(ns + ".")))
+                            Assert.Fail($"{because} (leaked: {mb.GetType().FullName} on '{root.name}')");
+                    }
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(probe);
+            }
+        }
+
+        // A game is "alive" when a MonoBehaviour from its own namespace is present and active in the scene.
+        private static void AssertGameAlive(string ns, string because)
+        {
+            foreach (var mb in UnityEngine.Object.FindObjectsByType<MonoBehaviour>(FindObjectsSortMode.None))
+            {
+                if (mb == null) continue;
+                string tns = mb.GetType().Namespace;
+                if (tns != null && (tns == ns || tns.StartsWith(ns + ".")))
+                    return;
+            }
+            Assert.Fail(because);
+        }
+
+        // Shared body: enter an installed game by charging its own control to full, prove it is alive +
+        // the watchdog armed, shoot it, then return to the launcher and prove the launcher is back up.
+        // For nativeInput games the exit gesture runs through the LIVE watchdog runner (the production
+        // path); for ArcadeInput-native games the test pumps ArcadeInput itself, standing in for the
+        // game's own pump.
+        private IEnumerator RunGame(BackendSnapshot heldControl, string sceneName, string ns, string shot, bool nativeInput)
         {
             yield return SceneManager.LoadSceneAsync(HubScenes.HubMenu, LoadSceneMode.Single);
             yield return null;
-            TakeOverInput();
+            TakeOverInput(); // menu phase: the MENU's scene runner is hub-owned and replaceable
 
-            yield return EnterHomeAlone();
+            yield return EnterByHold(heldControl, sceneName);
 
-            var game = UnityEngine.Object.FindAnyObjectByType<GameController>();
-            Assert.IsNotNull(game, "Home Alone's GameController must be alive after launching Apartment.");
-            Assert.IsNotNull(game.Session, "The match session booted.");
+            AssertGameAlive(ns, $"{ns}: a root object must be alive after launching '{sceneName}' from the menu.");
             Assert.IsTrue(LauncherReturn.Instance != null,
                 "The launcher armed its return watchdog for the external game.");
 
-            TakeOverInput(); // re-take input inside the game scene (its runner reset ArcadeInput on load)
-            yield return TryCapture("hub-into-homealone.png");
+            if (nativeInput)
+            {
+                // Do NOT touch the watchdog's runner — it is the only ArcadeInput pump in this scene and
+                // the exact production path for the MenuButton return. Screenshot first (backend neutral).
+                yield return TryCapture(shot);
+                yield return ExitToMenuViaWatchdogRunner();
+            }
+            else
+            {
+                TakeOverInput(); // re-take input inside the game scene (the game pumps ArcadeInput itself)
+                yield return TryCapture(shot);
+                yield return ExitToMenuByMenuButton();
+            }
 
-            // MenuButton hands control back to the launcher.
-            yield return ExitToMenuByMenuButton();
-            Assert.AreEqual(0, UnityEngine.Object.FindObjectsByType<GameController>(FindObjectsSortMode.None).Length,
-                "Returning to the menu tears the game scene down (no GameController survivor).");
             Assert.IsNull(LauncherReturn.Instance, "The return watchdog destroyed itself once the menu is up.");
-            var menu = UnityEngine.Object.FindAnyObjectByType<HubMenuController>();
-            Assert.IsNotNull(menu, "The launcher menu is back.");
-
-            // Second entry is a clean start: exactly one controller, no menu survivor in the game scene.
-            TakeOverInput();
-            yield return EnterHomeAlone();
-            Assert.AreEqual(1, UnityEngine.Object.FindObjectsByType<GameController>(FindObjectsSortMode.None).Length,
-                "Re-entering Home Alone is a clean start (one GameController, never two).");
-            Assert.AreEqual(0, UnityEngine.Object.FindObjectsByType<HubMenuController>(FindObjectsSortMode.None).Length,
-                "No launcher menu survives into the game scene (no DontDestroyOnLoad leak).");
-
-            // Land back in the menu so the test leaves a clean scene.
-            TakeOverInput();
-            yield return ExitToMenuByMenuButton();
+            Assert.AreEqual(HubScenes.HubMenu, SceneManager.GetActiveScene().name,
+                $"MenuButton must return to the launcher from {ns}.");
+            Assert.IsNotNull(UnityEngine.Object.FindAnyObjectByType<HubMenuController>(), "The launcher menu is back.");
         }
 
-        // ---------------- Life Choices ----------------
+        // ---------------- the five installed games ----------------
 
         [UnityTest]
-        public IEnumerator LifeChoices_LaunchesByHoldToLaunch_ReturnsByMenuButton_ReentersClean()
+        public IEnumerator Sisyphus_LaunchesByCrankHold_IsAlive_ReturnsByMenuButton()
         {
+            // Code-genned game: its Main scene is empty; Bootstrap builds SisyphusGame on scene load. This
+            // proves the boot fires when the launcher loads the packaged scene (not just at play start).
+            yield return RunGame(HoldSisyphus, "Main", "EndlessSisyphus", "hub-into-sisyphus.png", nativeInput: false);
+        }
+
+        [UnityTest]
+        public IEnumerator Factory_LaunchesByRedHold_ReturnsViaWatchdogPump_JanitorSweepsDdol_ReentryWorks()
+        {
+            // Red HOLD charges the Factory slot to full — the founder's gate-2 fix: red no longer
+            // instant-launches the highlighted row (that path is gone), it charges its OWN slot.
+            yield return RunGame(HoldFactory, "Boot", "LastShift", "hub-into-factory.png", nativeInput: true);
+
+            // The hub's DDOL janitor swept Factory's leaked singletons (GameManager from Boot's Ensure,
+            // ArduinoInputBridge from its global RuntimeInit). Destroy is deferred — let the frame close.
+            yield return null;
+            yield return null;
+            AssertNoDdolObjectsFrom("LastShift",
+                "After returning from Factory the DDOL scene must hold no factory objects (hub janitor).");
+
+            // Re-entry after the sweep works: Factory's Boot recreates what it needs (GameManager.Ensure).
+            TakeOverInput();
+            yield return EnterByHold(HoldFactory, "Boot");
+            AssertGameAlive("LastShift", "Factory must boot again cleanly after the janitor sweep.");
+
+            // Leave the cabinet on the menu — again through the live watchdog runner.
+            yield return ExitToMenuViaWatchdogRunner();
+            Assert.IsNotNull(UnityEngine.Object.FindAnyObjectByType<HubMenuController>(), "The launcher menu is back.");
+        }
+
+        [UnityTest]
+        public IEnumerator LifeChoices_LaunchesByGreenHold_IsAlive_ReturnsByMenuButton()
+        {
+            yield return RunGame(HoldLifeChoices, "ThanksNoThanks", "ThanksNoThanks", "hub-into-lifechoices.png", nativeInput: false);
+        }
+
+        [UnityTest]
+        public IEnumerator LadyBug_LaunchesByHeightAHold_IsAlive_ReturnsViaWatchdogPump()
+        {
+            // Legacy Input Manager game: never pumps ArcadeInput — the return MUST go through the
+            // watchdog's own runner, which this test leaves alive (the honest production path).
+            yield return RunGame(HoldLadyBug, "Main", "LadyBug", "hub-into-ladybug.png", nativeInput: true);
+        }
+
+        [UnityTest]
+        public IEnumerator HomeAlone_LaunchesByHeightBHold_IsAlive_ReturnsByMenuButton()
+        {
+            yield return RunGame(HoldHomeAlone, "Apartment", "HomeAlone", "hub-into-homealone.png", nativeInput: false);
+        }
+
+        // ---------------- founder's gate-2 regression: red press must NOT instant-launch ----------------
+
+        [UnityTest]
+        public IEnumerator RedPress_DoesNotInstantLaunch_ItChargesTheFactorySlot()
+        {
+            // The live gate-2 bug: pressing RED launched the HIGHLIGHTED row (cursor sits on Sisyphus by
+            // default) instead of charging Factory's red-bound slot. With instant-select removed, a red
+            // press must launch NOTHING immediately — it only feeds the Factory slot's charge.
             yield return SceneManager.LoadSceneAsync(HubScenes.HubMenu, LoadSceneMode.Single);
             yield return null;
             TakeOverInput();
@@ -160,45 +274,40 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsNotNull(htl, "HoldToLaunchController must be wired into the HubMenu scene.");
             htl.AutoTick = false;
 
-            yield return EnterLifeChoices(htl);
-
-            var driver = UnityEngine.Object.FindAnyObjectByType<GameDriver>();
-            Assert.IsNotNull(driver, "Life Choices' GameDriver must be alive after launching ThanksNoThanks.");
-            Assert.IsNotNull(driver.Game, "The game constructed on boot.");
-            Assert.IsTrue(LauncherReturn.Instance != null,
-                "The launcher armed its return watchdog for the external game.");
-
-            TakeOverInput();
-            driver.DebugPreviewArcadeShot(); // pose a representative mid-life card (the game's own screenshot hook)
-            yield return TryCapture("hub-into-lifechoices.png");
-
-            yield return ExitToMenuByMenuButton();
-            Assert.AreEqual(0, UnityEngine.Object.FindObjectsByType<GameDriver>(FindObjectsSortMode.None).Length,
-                "Returning to the menu tears the game scene down (no GameDriver survivor).");
-            Assert.IsNull(LauncherReturn.Instance, "The return watchdog destroyed itself once the menu is up.");
             var menu = UnityEngine.Object.FindAnyObjectByType<HubMenuController>();
-            Assert.IsNotNull(menu, "The launcher menu is back.");
+            Assert.AreEqual(0, menu.SelectedIndex, "Cursor starts on slot 0 (Sisyphus) — the bug's setup.");
 
-            // Second entry is a clean start. (Re-take input first: the reloaded HubMenu's runner reset
-            // ArcadeInput back to the keyboard backend on the way in.)
-            TakeOverInput();
-            var htl2 = UnityEngine.Object.FindAnyObjectByType<HoldToLaunchController>();
-            Assert.IsNotNull(htl2);
-            htl2.AutoTick = false;
-            yield return EnterLifeChoices(htl2);
-            Assert.AreEqual(1, UnityEngine.Object.FindObjectsByType<GameDriver>(FindObjectsSortMode.None).Length,
-                "Re-entering Life Choices is a clean start (one GameDriver, never two).");
-            Assert.AreEqual(0, UnityEngine.Object.FindObjectsByType<HubMenuController>(FindObjectsSortMode.None).Length,
-                "No launcher menu survives into the game scene (no DontDestroyOnLoad leak).");
+            // Hold RED for ~1s of fixed dt: far past any instant edge, far short of the 5s full charge.
+            var red = new BackendSnapshot { RedHeld = true };
+            for (int i = 0; i < 10; i++)
+            {
+                _fake.Next = red;
+                ArcadeInput.Update(0.1f);
+                htl.Tick(0.1f);
+                yield return null;
+            }
 
-            TakeOverInput();
-            yield return ExitToMenuByMenuButton();
+            Assert.AreEqual(HubScenes.HubMenu, SceneManager.GetActiveScene().name,
+                "A red press must NOT launch any scene instantly (instant-select is removed).");
+            Assert.AreEqual(1, htl.ActiveSlot, "The red press charges its OWN slot — Factory (slot 1).");
+            Assert.Greater(htl.Charge, 0.1f, "The Factory slot is charging while red is held.");
+
+            // Release: the charge decays, still no launch — the menu is intact.
+            for (int i = 0; i < 15; i++)
+            {
+                _fake.Next = Neutral;
+                ArcadeInput.Update(0.1f);
+                htl.Tick(0.1f);
+                yield return null;
+            }
+            Assert.AreEqual(HubScenes.HubMenu, SceneManager.GetActiveScene().name);
+            Assert.AreEqual(0f, htl.Charge, 1e-3, "Released early, the charge decays to zero — nothing launched.");
         }
 
-        // ---------------- Menu screenshot (3× [PLAY]) ----------------
+        // ---------------- Menu screenshot (5× [PLAY]) ----------------
 
         [UnityTest]
-        public IEnumerator Capture_HubMenu_ShowsThreeInstalledGames()
+        public IEnumerator Capture_HubMenu_ShowsFiveInstalledGames()
         {
             yield return SceneManager.LoadSceneAsync(HubScenes.HubMenu, LoadSceneMode.Single);
             yield return null;
@@ -207,25 +316,26 @@ namespace AiGameStudio.ArcadeHub.Tests
             var menu = UnityEngine.Object.FindAnyObjectByType<HubMenuController>();
             Assert.IsNotNull(menu, "HubMenuController present.");
 
-            // Three rows read "[ PLAY ]" (Test Game, Home Alone, Life Choices are installed).
-            int playRows = 0;
+            int playRows = 0, soonRows = 0;
             for (int i = 0; i < menu.RowCount; i++)
+            {
                 if (menu.Rows[i].text.Contains("[ PLAY ]")) playRows++;
-            Assert.AreEqual(3, playRows, "Exactly three menu rows are installed and show [ PLAY ].");
+                if (menu.Rows[i].text.Contains("[ soon ]")) soonRows++;
+            }
+            Assert.AreEqual(5, playRows, "Five menu rows are installed and show [ PLAY ].");
+            Assert.AreEqual(2, soonRows, "Two menu rows are 'soon'.");
 
-            yield return TryCapture("hub-menu-3play.png");
+            yield return TryCapture("hub-menu-5play.png");
         }
 
         // -------- screenshot helper (mirrors the packaging screenshot harness) --------
 
-        // Capture the active scene (game world/UI) to a PNG under HUB_SHOT_DIR and assert zero magenta.
-        // No-op (test still passes) when there is no graphics device — cam.Render() crashes under -nographics.
         private IEnumerator TryCapture(string fileName)
         {
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Null)
                 yield break;
 
-            for (int i = 0; i < 4; i++) yield return null; // let the scene settle/render its HUD
+            for (int i = 0; i < 6; i++) yield return null; // let the scene settle/render its HUD
 
             const int W = 1920, H = 1080;
 
@@ -243,8 +353,7 @@ namespace AiGameStudio.ArcadeHub.Tests
                 cam.transform.position = new Vector3(0f, 0f, -10f);
             }
 
-            // Pull ScreenSpaceOverlay UI into the camera's render so it lands in the RenderTexture.
-            var reparented = new List<Canvas>();
+            var reparented = new System.Collections.Generic.List<Canvas>();
             foreach (var canvas in UnityEngine.Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
             {
                 if (canvas.isActiveAndEnabled && canvas.renderMode == RenderMode.ScreenSpaceOverlay)

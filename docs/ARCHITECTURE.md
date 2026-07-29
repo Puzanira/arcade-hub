@@ -66,11 +66,12 @@ screen-space canvas; font `Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf
 `HubMenuModel` cursor:
 
 - **Navigate** — joystick vertical (`ArcadeInput.Joystick.Vector.y`), one move per push (an arm/release
-  latch), wrapping top↔bottom.
-- **Select** — red-button rising edge (`ArcadeInput.RedButton`). Input is *polled* (not event
-  subscription) so it survives `ArcadeInput.Initialize` being called again across scene loads/tests.
-- **Installed slot** → `SceneManager.LoadScene(entryScene)`.
-- **Planned slot** → shows a "COMING SOON — <game>" line; loads nothing.
+  latch), wrapping top↔bottom. Input is *polled* (not event subscription) so it survives
+  `ArcadeInput.Initialize` being called again across scene loads/tests.
+- **The highlight is informational only** (name/status browsing). The menu never loads a scene:
+  launching lives exclusively in hold-to-launch (hold/crank a slot's own control to full charge).
+  *Founder's gate-2 decision (2026-07): the old red-button instant-select launched the HIGHLIGHTED row
+  and shadowed charging the red-bound slot — it is removed entirely.*
 
 A malformed or missing config logs one clear console error and yields an **empty** menu — the launcher
 still comes up. Each row's text is one-hot (its own unique game name), so a crossed row cannot pass the
@@ -101,7 +102,9 @@ kit (`ARCADE_INTEGRATION.md` + contract tests + CI) will enforce per repo — se
   `HubMenuModel` navigation (wrap-around, empty menu, installed/planned selection).
 - **PlayMode** — loads `HubMenu`, takes over input with a `FakeBackend`, asserts all 7 rows are visible
   by real rect size **and** viewport overlap (a big off-screen rect fails) with correct per-row content,
-  navigates, enters `TestGame` with RED, returns with MENU, and re-enters to prove a clean start.
+  and navigates (highlight only). The `TestGame` rig loop runs through the hold path: a config injected
+  into the scene's real `HoldToLaunchController` binds it to the crank; crank to full → launch, MENU
+  returns, re-enter proves a clean start.
 
 Run headless (Editor closed):
 
@@ -142,11 +145,11 @@ The engagement rules per control kind (spec §2.3): buttons — held; height sen
 threshold; joystick — deflection magnitude above a threshold; crank — `|degrees this frame|` above a
 threshold, latched for a short timeout so the gaps between discrete turns don't read as "released".
 
-**Coexistence note:** hub-v0's `HubMenuController` keeps its instant RED-to-select (its PlayMode test
-owns that contract), so two selection models run side by side for now. Hold-to-launch is exercised
-through controls the menu does not consume (Crank for the installed Test Game slot, Green for a planned
-slot) to avoid cross-talk. Retiring instant-select and resolving joystick navigation-vs-charge is a
-follow-up decision.
+**Hold-to-launch is the ONLY launch path** (founder's gate-2 decision, 2026-07). Instant-select is
+retired: it fired the highlighted row on a red press, which in the all-games layout shadowed charging
+the red-bound Factory slot. Now every control — including RedButton — only charges its own slot; the
+joystick remains navigation (informational highlight), which does not conflict with charging since the
+Joystick-bound slot is a "soon" placeholder and joystick charge is deflection-magnitude-based anyway.
 
 ## Games integration (stage ②, landed)
 
@@ -181,9 +184,14 @@ return: before loading an external game it arms `LauncherReturn`, a launcher-own
 watchdog that watches the same `ArcadeInput.MenuButton` and loads `HubMenu` on the exit gesture, then
 destroys itself. The gesture is the universal cabinet rule (and matches Home Alone's own exit): a
 MenuButton still held while the game LOADS must not exit — a release is seen first, then a fresh press
-fires (plus a one-frame warmup). It is armed from both launch paths (`HoldToLaunchController.Fire` and
-`HubMenuController.Choose`) and skipped for the self-returning TestGame, so hub-v0's PlayMode loop is
-untouched.
+fires (plus a one-frame warmup). It is armed from the single launch path (`HoldToLaunchController.Fire`)
+and skipped for the self-returning TestGame. For `nativeInput` slots (games that never pump
+`ArcadeInput` — Lady Bug on the legacy Input Manager, Factory on the raw new Input System) the watchdog
+carries its own `ArcadeInputRunner` so the MenuButton gesture still reads; ArcadeInput-native games must
+not be double-pumped and get no runner. On every menu entry `HubDdolJanitor` sweeps foreign
+DontDestroyOnLoad objects leaked by external games (e.g. Factory's `GameManager`/`ArduinoInputBridge`) —
+whitelisted namespaces (`AiGameStudio*`, `Unity*`, `TMPro`) survive; games recreate their singletons on
+entry.
 
 ### Tests
 
@@ -196,12 +204,27 @@ untouched.
   survivor). Run WITH graphics, each test also writes a 1920×1080 PNG (menu 3× [PLAY]; each game running
   from the hub) and asserts zero magenta.
 
+## All-games wiring (stage ④, landed)
+
+The launcher runs all FIVE cabinet games (founder's layout): Crank=Endless Sisyphus,
+Red=«Последняя смена (Factory)», Green=Life Choices, HeightA=Lady Bug, HeightB=Home Alone;
+Bang=Arcade Prototype and Joystick=Медитация are "soon" placeholders. Test Game left the shipped
+config (its scene/rig stay in the project; tests drive it via an injected config). Three external repos
+are consumed as `file:` packages on their arcade branches
+(`com.aigamestudio.game-endless-sisyphus`, `com.aigamestudio.game-factory`,
+`com.aigamestudio.game-lady-bug`); their scenes are in Build Settings by package path — the two `Main`
+scenes (Sisyphus, Lady Bug) collide by short name, so their `entryScene` in the config is the full
+package path. Compatibility debt, deliberately hub-side: `activeInputHandler=Both` (Lady Bug is on the
+legacy Input Manager); external games play with their NATIVE keyboard input for now (moving them onto
+`ArcadeInput` is a later increment per game); `nativeInput` slots get a watchdog-carried input pump and
+the DDOL janitor sweeps their leaked singletons (see `LauncherReturn` above).
+
 ## Original path to stage ③ (for reference)
 
-hub-v0 is a **keyed menu**: press RED to select. Stage ③ replaces instant selection with the real
+hub-v0 was a **keyed menu**: press RED to select. Stage ③ replaced instant selection with the real
 cabinet interaction — *hold/crank a control for 5 seconds* to launch (a charge bar 0→1, decay on
 release, exclusivity while one control is active, and the themed "rain of objects" fill). The launcher
-becomes a deterministic state machine (`Idle → Charging(C) → Launching`) that is pure-C# testable, still
-reading only `ArcadeInput`. The menu, config, package seam, and game-scene contract built here are the
-foundation it sits on; none of them change when hold-to-launch lands.
+became a deterministic state machine (`Idle → Charging(C) → Launching`) that is pure-C# testable, still
+reading only `ArcadeInput`. For a while both selection models coexisted; the founder's gate-2 decision
+(2026-07) retired instant-select for good — see "The menu" above.
 ```

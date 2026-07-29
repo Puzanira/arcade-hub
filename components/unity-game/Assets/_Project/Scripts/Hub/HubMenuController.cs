@@ -1,16 +1,17 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using AiGameStudio.ArcadeControls;
 
 namespace AiGameStudio.ArcadeHub
 {
     /// <summary>
-    /// The launcher menu (scene 0). Loads the slot list from StreamingAssets, builds a procedural UGUI
-    /// list, and drives selection ENTIRELY through <see cref="ArcadeInput"/> — joystick up/down moves the
-    /// cursor (with wrap-around), the red button chooses. Choosing an installed slot loads its scene;
-    /// choosing a planned slot shows a "coming soon" placeholder. No raw device input lives here.
+    /// The launcher menu (scene 0). Loads the slot list from StreamingAssets and builds a procedural UGUI
+    /// list. Input goes ENTIRELY through <see cref="ArcadeInput"/>: joystick up/down moves an INFORMATIONAL
+    /// highlight over the rows (name/status browsing, wrap-around). Launching is NOT done here — the menu
+    /// never loads a scene. The ONLY launch path is <see cref="HoldToLaunchController"/>: hold/crank a
+    /// slot's own control to charge it to full (founder's decision, gate-2 2026-07: the old red-button
+    /// instant-select launched the highlighted row and shadowed charging the red-bound slot — removed).
     /// </summary>
     [AddComponentMenu("Arcade Hub/Hub Menu Controller")]
     [DisallowMultipleComponent]
@@ -24,24 +25,19 @@ namespace AiGameStudio.ArcadeHub
 
         private HubMenuModel _model;
         private readonly List<Text> _rows = new List<Text>();
-        private Text _placeholder;
         private Font _font;
 
         // Input edge-detection state (polled, so it survives ArcadeInput re-initialization in tests).
         private bool _navArmed = true;
-        private bool _redPrev;
 
         /// <summary>The row labels, one per slot, in slot order (for tests to assert visibility/content).</summary>
         public IReadOnlyList<Text> Rows => _rows;
 
-        /// <summary>Currently highlighted slot index.</summary>
+        /// <summary>Currently highlighted slot index (informational only — never launches anything).</summary>
         public int SelectedIndex => _model?.SelectedIndex ?? 0;
 
         /// <summary>Number of rows built from the config.</summary>
         public int RowCount => _rows.Count;
-
-        /// <summary>True while the "coming soon" placeholder is on screen (after choosing a planned slot).</summary>
-        public bool PlaceholderVisible => _placeholder != null && _placeholder.gameObject.activeSelf;
 
         /// <summary>Injection hook for tests: build the menu from an explicit config instead of StreamingAssets.</summary>
         public void InitializeWith(LauncherConfig config)
@@ -51,6 +47,13 @@ namespace AiGameStudio.ArcadeHub
 
         private void Start()
         {
+            // Sweep leaked external DDOL objects on EVERY menu entry: after returning from a game
+            // (e.g. Factory's GameManager) and on the very first menu load (Factory's ArduinoInputBridge
+            // spawns via a global RuntimeInitializeOnLoadMethod in whatever scene starts play — ours too;
+            // RuntimeInit runs before Start, so it is already in DDOL by now). External code is untouched;
+            // games recreate their singletons on entry (Factory's Boot calls GameManager.Ensure()).
+            HubDdolJanitor.CleanForeigners();
+
             if (_model == null)
                 BuildFrom(LauncherConfigLoader.LoadFromStreamingAssets());
         }
@@ -59,7 +62,9 @@ namespace AiGameStudio.ArcadeHub
         {
             if (_model == null) return;
 
-            // Navigation: joystick vertical, one move per push (armed/disarmed by a release threshold).
+            // Navigation only: joystick vertical, one move per push (armed/disarmed by a release
+            // threshold). The highlight is informational — no button here selects or launches anything;
+            // launching lives exclusively in HoldToLaunchController (hold a slot's control to full).
             float y = ArcadeInput.Joystick.Vector.y;
             if (_navArmed)
             {
@@ -69,34 +74,6 @@ namespace AiGameStudio.ArcadeHub
             else if (Mathf.Abs(y) < navReleaseThreshold)
             {
                 _navArmed = true;
-            }
-
-            // Selection: red button rising edge.
-            bool red = ArcadeInput.RedButton.IsHeld;
-            if (red && !_redPrev) Choose();
-            _redPrev = red;
-        }
-
-        private void Choose()
-        {
-            LauncherSlot slot = _model.Selected;
-            if (slot == null) return;
-
-            if (slot.IsInstalled)
-            {
-                // External games reset in place on MenuButton but don't know the hub's menu scene, so the
-                // launcher arms a return watchdog. The built-in TestGame returns to the menu itself.
-                if (slot.entryScene != HubScenes.TestGame)
-                    LauncherReturn.ArmFor(HubScenes.HubMenu);
-                SceneManager.LoadScene(slot.entryScene);
-                return;
-            }
-
-            // Planned slot: surface a clear "coming soon" line instead of loading anything.
-            if (_placeholder != null)
-            {
-                _placeholder.text = $"COMING SOON — {slot.displayName}";
-                _placeholder.gameObject.SetActive(true);
             }
         }
 
@@ -129,7 +106,7 @@ namespace AiGameStudio.ArcadeHub
                 new Vector2(leftMargin, -90f), new Vector2(rowWidth, 70f), 54, FontStyle.Bold,
                 Color.white, TextAnchor.MiddleLeft);
             CreateLabel(canvas.transform, "HubSubtitle",
-                "Joystick up/down to move  •  RED (Э, слева от Enter) to select  •  MENU (Esc) exits a game",
+                "Джойстик вверх/вниз — листать  •  зажми контрол своей игры на 5 сек, чтобы запустить  •  MENU (Esc) — выход из игры",
                 new Vector2(leftMargin, -160f), new Vector2(rowWidth, 40f), 26, FontStyle.Normal,
                 new Color(0.7f, 0.7f, 0.75f), TextAnchor.MiddleLeft);
 
@@ -142,12 +119,8 @@ namespace AiGameStudio.ArcadeHub
                     Color.white, TextAnchor.MiddleLeft);
                 _rows.Add(row);
             }
-
-            _placeholder = CreateLabel(canvas.transform, "Placeholder", "",
-                new Vector2(leftMargin, -(topMargin + config.slots.Count * rowHeight + 40f)),
-                new Vector2(rowWidth, 60f), 36, FontStyle.Bold,
-                new Color(1f, 0.85f, 0.2f), TextAnchor.MiddleLeft);
-            _placeholder.gameObject.SetActive(false);
+            // No "coming soon" placeholder here any more: with instant-select gone the menu cannot choose
+            // a planned slot — the СКОРО overlay for a fully-charged planned slot lives in HoldToLaunch.
         }
 
         private void RefreshHighlight()
