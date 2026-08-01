@@ -36,7 +36,7 @@
       }
     },
     "com.aigamestudio.game-lady-bug": {
-      "version": "file:../../../../../external/lady_bug/UnityProject/Assets/LadyBug",
+      "version": "file:../../../../../external/lady_bug-v2/UnityProject/Assets/LadyBug",
       "depth": 0,
       "source": "local",
       "dependencies": {}
