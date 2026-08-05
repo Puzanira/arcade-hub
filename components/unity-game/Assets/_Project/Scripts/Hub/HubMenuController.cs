@@ -36,6 +36,14 @@ namespace AiGameStudio.ArcadeHub
             // games recreate their singletons on entry (Factory's Boot calls GameManager.Ensure()).
             HubDdolJanitor.CleanForeigners();
 
+            // AudioListener.volume/pause are PROCESS-GLOBAL: a game that mutes itself (Sisyphus has a
+            // mute toggle) and is exited through the MenuButton watchdog never gets to restore them —
+            // and would leave every following game silent while the attract reel (Direct audio, bypasses
+            // the Unity mixer) keeps sounding. The menu is the one place every path funnels through,
+            // so it unconditionally hands the next game a live mixer.
+            AudioListener.volume = 1f;
+            AudioListener.pause = false;
+
             // The attract reel: full-screen looping video with sound, under the hold-to-launch overlay.
             var videoGO = new GameObject("AttractVideo");
             videoGO.transform.SetParent(transform, false);
@@ -45,10 +53,18 @@ namespace AiGameStudio.ArcadeHub
             // our own brighter credits ticker and the title that names whichever game the player's control
             // launches. It reads the active slot straight off the hold-to-launch controller, so the title,
             // the charge bar and the themed rain can never name different games.
+            var holdToLaunch = FindAnyObjectByType<HoldToLaunchController>();
+
             var overlayGO = new GameObject("AttractOverlay");
             overlayGO.transform.SetParent(transform, false);
             _overlay = overlayGO.AddComponent<AttractOverlay>();
-            _overlay.Bind(_video, FindAnyObjectByType<HoldToLaunchController>());
+            _overlay.Bind(_video, holdToLaunch);
+
+            // The charge bar now lives in that same reclaimed band, under the title, so it has to hang off
+            // the reel's letterboxed rect rather than off the hold-to-launch canvas. Wired here because
+            // only this component knows when the reel exists; the call is order-independent.
+            if (holdToLaunch != null)
+                holdToLaunch.AttachChargeBarTo(_video);
         }
     }
 }

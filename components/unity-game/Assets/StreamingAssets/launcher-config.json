@@ -10,7 +10,7 @@
     },
     {
       "controlName": "RedButton",
-      "displayName": "Завод",
+      "displayName": "Последняя смена",
       "entryScene": "Boot",
       "status": "installed",
       "nativeInput": true,

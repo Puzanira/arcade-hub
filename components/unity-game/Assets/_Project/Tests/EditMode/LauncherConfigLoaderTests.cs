@@ -85,7 +85,7 @@ namespace AiGameStudio.ArcadeHub.Tests
 
             // Each installed game sits on its founder-assigned control with a real entry scene.
             AssertInstalledOn(config, "Crank",       "Бесконечный Сизиф");
-            AssertInstalledOn(config, "RedButton",   "Завод");
+            AssertInstalledOn(config, "RedButton",   "Последняя смена");
             AssertInstalledOn(config, "GreenButton", "Спасибо, не надо");
             AssertInstalledOn(config, "HeightA",     "Lady Bug Hit The Road");
             AssertInstalledOn(config, "HeightB",     "Кошачьи будни");
@@ -98,7 +98,7 @@ namespace AiGameStudio.ArcadeHub.Tests
 
             // Native-input games (legacy/raw input) carry the pump flag so the return watchdog stays live.
             Assert.IsTrue(config.slots.Find(s => s.displayName == "Lady Bug Hit The Road").nativeInput, "Lady Bug is native-input.");
-            Assert.IsTrue(config.slots.Find(s => s.displayName == "Завод").nativeInput, "Factory is native-input.");
+            Assert.IsTrue(config.slots.Find(s => s.displayName == "Последняя смена").nativeInput, "Factory is native-input.");
             // …and the ArcadeInput-native ones must NOT, or they get pumped twice: Медитация's entry scene
             // carries its own ArcadeInputRunner, and a doubled pump would count every crank degree twice —
             // which on this game is the whole collection mechanic.

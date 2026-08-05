@@ -13,6 +13,12 @@ namespace AiGameStudio.ArcadeHub
     /// time (exclusivity). At full charge an installed slot loads its scene; a planned slot shows a
     /// "СКОРО" overlay and resets.
     ///
+    /// The bar itself is NOT a bottom-of-screen HUD element any more (founder, 2026-08-05: «полосу
+    /// прогрузки вставлять под название» + «единого цвета»). It hangs in the band the attract screen
+    /// reclaims from the clip, directly under the game's title, framed in the reel's own pixel idiom, and
+    /// in ONE colour for every slot — see <see cref="BuildChargeBar"/> and
+    /// <see cref="AttachChargeBarTo"/>.
+    ///
     /// The launch feedback is the arcade cabinet's SHARED start animation: falling sprites rain down and
     /// pile up a screen-filling grid from the bottom row up, covered in proportion to the charge and
     /// cleared from the top down as it decays. The fall/fill behaviour is adapted from the per-game start
@@ -60,6 +66,10 @@ namespace AiGameStudio.ArcadeHub
         [SerializeField] private float fallOffset = 400f;
         [Tooltip("Seconds a single sprite takes to fall from its start into its resting cell (source: IntroSequence.fallDuration).")]
         [SerializeField] private float fallDuration = 0.4f;
+        [Tooltip("Largest a falling object may be drawn, as a multiple of the base cell sprite size. Every " +
+                 "spawn rolls its own size in [1, this]; the base size is therefore the SMALLEST an object " +
+                 "can be (founder, 2026-08-05: «текущих брать как самый маленький размер»).")]
+        [SerializeField] private float rainSizeMax = 1.75f;
 
         /// <summary>When false, <see cref="Update"/> does not advance — tests drive <see cref="Tick"/> with a fixed dt.</summary>
         public bool AutoTick = true;
@@ -70,10 +80,12 @@ namespace AiGameStudio.ArcadeHub
         private bool[] _engaged;
 
         private Canvas _canvas;
-        private RectTransform _barFill;
-        private RectTransform _barBg;
+        private RectTransform _barRoot;   // the framed bar as a whole; tracks the attract reel's own rect
+        private RectTransform _barTrack;  // the empty slot inside the frame
+        private RectTransform _barFill;   // the amber that grows across the track
         private Text _comingSoon;
         private RectTransform _flowerRoot;
+        private AttractVideoScreen _attractVideo;
         private Font _font;
 
         // The full screen-filling grid, one cell per Image, all built inactive up-front; only the first
@@ -90,9 +102,8 @@ namespace AiGameStudio.ArcadeHub
         private readonly Dictionary<int, Sprite[]> _slotSpriteCache = new Dictionary<int, Sprite[]>();
         private int _gridColumns;
         private int _gridRows;
+        private float _cellBaseSize;      // the SMALLEST a falling object is drawn (sizes roll upward from it)
 
-        private const float BarWidth = 1200f;
-        private const float BarHeight = 44f;
         private const float RefWidth = 1920f;
         private const float RefHeight = 1080f;
 
@@ -130,6 +141,22 @@ namespace AiGameStudio.ArcadeHub
         }
 
         public RectTransform BarFill => _barFill;
+
+        /// <summary>
+        /// The framed bar as a whole (test seam: it must sit in the band UNDER the attract title, not at
+        /// the bottom of the screen).
+        /// </summary>
+        public RectTransform ChargeBar => _barRoot;
+
+        /// <summary>The bar's empty slot — the fill's full-charge width (test seam).</summary>
+        public RectTransform ChargeBarTrack => _barTrack;
+
+        /// <summary>Smallest size a falling object is ever drawn at, in reference pixels (test seam).</summary>
+        public float RainSizeMin => _cellBaseSize;
+
+        /// <summary>Largest size a falling object may roll, in reference pixels (test seam).</summary>
+        public float RainSizeMax => _cellBaseSize * Mathf.Max(1f, rainSizeMax);
+
         public Text ComingSoonLabel => _comingSoon;
         public bool ComingSoonVisible => _comingSoon != null && _comingSoon.gameObject.activeSelf;
 
@@ -187,7 +214,9 @@ namespace AiGameStudio.ArcadeHub
             if (_comingSoon != null)
             {
                 _comingSoon.text = $"СКОРО — {slot.displayName}";
-                _comingSoon.color = ColorForSlot(slotIndex);
+                // Same amber as the bar that just filled to summon it — the planned-slot ending has to
+                // look like the charge it came out of, not like a seventh slot colour.
+                _comingSoon.color = AttractZones.ChargeColor;
                 _comingSoon.gameObject.SetActive(true);
             }
             _machine.Reset();
@@ -218,8 +247,10 @@ namespace AiGameStudio.ArcadeHub
             float charge = _machine.Charge;
             int slot = _machine.ActiveSlot;
 
+            // ONE colour for every slot (founder, 2026-08-05) — the bar no longer repaints itself per
+            // slot. Which game is being charged is said by the title above the bar and by the themed rain;
+            // a bar that also changed colour made the screen read as three competing signals.
             SetBarFill(charge);
-            _barFill.GetComponent<Image>().color = ColorForSlot(slot);
 
             if (charge <= 0f || slot < 0)
             {
@@ -244,12 +275,20 @@ namespace AiGameStudio.ArcadeHub
             AdvanceFalls(dt);
         }
 
-        // Bring cell fillOrder[slotInFill] into view: skin it for the active slot and start its fall.
+        // Bring cell fillOrder[slotInFill] into view: skin it for the active slot, roll its size and start
+        // its fall. Every spawn gets its OWN size (founder, 2026-08-05: «рандомизация для всех игр
+        // размеров ассетов — причем текущих брать как самый маленький размер — чтобы было интереснее»), so
+        // the pile reads as a heap of different objects instead of a tiled texture. The old fixed size is
+        // the bottom of the range, never the average: nothing ever gets SMALLER than what she already
+        // approved, the rain only gains bigger pieces. Rolled per activation, so a cell that clears and
+        // re-fills comes back a different size — the pile is never the same twice.
         private void ActivateCell(int slotInFill, int slot, bool animated)
         {
             int k = _fillOrder[slotInFill];
             RectTransform rt = _cells[k];
             SkinCell(_cellImages[k], slot);
+            float size = _cellBaseSize * Random.Range(1f, Mathf.Max(1f, rainSizeMax));
+            rt.sizeDelta = new Vector2(size, size);
             _cellStarts[k] = _cellTargets[k] + new Vector2(0f, fallOffset);
             _cellFallT[k] = animated ? 0f : fallDuration;
             rt.anchoredPosition = animated ? _cellStarts[k] : _cellTargets[k];
@@ -322,15 +361,21 @@ namespace AiGameStudio.ArcadeHub
         private void SetBarFill(float charge01)
         {
             if (_barFill == null) return;
-            float w = Mathf.Clamp01(charge01) * BarWidth;
-            _barFill.sizeDelta = new Vector2(w, BarHeight);
+            float charge = Mathf.Clamp01(charge01);
 
-            // Idle keeps the attract video CLEAN: the whole bar (bg + fill) only exists while charging.
-            bool visible = charge01 > 0f;
-            if (_barBg != null && _barBg.gameObject.activeSelf != visible)
-                _barBg.gameObject.SetActive(visible);
+            // Idle keeps the attract video CLEAN: the whole bar (frame, track and fill) only exists while
+            // charging. Toggle BEFORE measuring — an inactive rect has no dependable width to scale against.
+            bool visible = charge > 0f;
+            if (_barRoot != null && _barRoot.gameObject.activeSelf != visible)
+                _barRoot.gameObject.SetActive(visible);
             if (_barFill.gameObject.activeSelf != visible)
                 _barFill.gameObject.SetActive(visible);
+
+            // The track's width is read live rather than hardcoded: the bar is anchored to the attract
+            // reel's rect, which is letterboxed to the clip's aspect, so its true width depends on the
+            // screen it lands on.
+            float track = _barTrack != null ? _barTrack.rect.width : 0f;
+            _barFill.sizeDelta = new Vector2(charge * track, 0f);
         }
 
         private void ClearFlowers()
@@ -380,27 +425,121 @@ namespace AiGameStudio.ArcadeHub
             _flowerRoot.offsetMax = Vector2.zero;
 
             BuildGrid();
-
-            // Progress bar, bottom-centre.
-            _barBg = MakeImage(_canvas.transform, "ChargeBarBg",
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 140f), new Vector2(BarWidth, BarHeight),
-                new Color(0f, 0f, 0f, 0.55f));
-
-            // Fill grows from the left edge of the bar.
-            _barFill = MakeImage(_canvas.transform, "ChargeBarFill",
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 0f),
-                new Vector2(-BarWidth / 2f, 140f), new Vector2(0f, BarHeight),
-                Color.white);
+            BuildChargeBar();
 
             // No hint label: the attract screen carries NO text (founder's rule) — the themed rain and
             // the growing bar are the feedback. The only allowed text is the "СКОРО" overlay below.
             _comingSoon = MakeLabel(_canvas.transform, "ComingSoon", "",
                 new Vector2(0.5f, 0.5f), new Vector2(0f, 220f), new Vector2(1600f, 120f),
-                84, FontStyle.Bold, new Color(1f, 0.85f, 0.2f));
+                84, FontStyle.Bold, AttractZones.ChargeColor);
             _comingSoon.gameObject.SetActive(false);
 
             SetBarFill(0f);
+        }
+
+        /// <summary>
+        /// Hang the charge bar on the attract reel's own rect. Idempotent, and safe to call before OR
+        /// after this controller has built its view (<see cref="HubMenuController"/> creates the reel in
+        /// its own Start, and Unity does not order Starts).
+        ///
+        /// The bar has to live on the REEL's rect, not on this controller's full-screen canvas, because it
+        /// is now positioned in clip-row space directly under the launcher's title — and the reel is
+        /// letterboxed to the clip's aspect. Anchored to the screen instead, the bar would drift away from
+        /// the title the moment the surface is not exactly 16:9.
+        /// </summary>
+        public void AttachChargeBarTo(AttractVideoScreen video)
+        {
+            _attractVideo = video;
+            ApplyChargeBarParent();
+        }
+
+        private void ApplyChargeBarParent()
+        {
+            if (_attractVideo == null || _barRoot == null) return;
+            _attractVideo.EnsureBuilt();
+            if (_attractVideo.Screen == null) return;
+            // Added last, so it draws over the reel, over the veil that fades the reel out while charging,
+            // and over the zone mask. The anchors are normalised, so re-parenting keeps the geometry.
+            _barRoot.SetParent(_attractVideo.Screen.transform, false);
+            _barRoot.SetAsLastSibling();
+        }
+
+        // The charge bar (founder, 2026-08-05: «полосу прогрузки хочется дизайн сделать получше и единого
+        // цвета» + «полосу прогрузки вставлять под название»). It moved out of the bottom of the screen
+        // into the band the attract screen reclaims from the clip, right under the title — so the two read
+        // as one block: the game's name, and how far it is from starting.
+        //
+        // The shape is drawn in the reel's own idiom — hard pixel edges, no rounding, no gradient: a thin
+        // amber frame, a near-black slot inside it, and the amber charge cut into notches by gaps in the
+        // slot's own colour. An empty bar therefore still reads as the same amber object rather than as a
+        // black hole on the reel, and a filling one ticks up in discrete steps like a cabinet's own meter.
+        private void BuildChargeBar()
+        {
+            float halfWidth = AttractZones.ChargeBarWidth / 2f / AttractZones.ClipWidth;
+
+            var rootGO = new GameObject("ChargeBar", typeof(RectTransform));
+            rootGO.transform.SetParent(_canvas.transform, false); // re-parented onto the reel when attached
+            _barRoot = rootGO.GetComponent<RectTransform>();
+            _barRoot.anchorMin = new Vector2(0.5f - halfWidth,
+                AttractZones.BottomFraction(AttractZones.ChargeBandBottom));
+            _barRoot.anchorMax = new Vector2(0.5f + halfWidth,
+                AttractZones.TopFraction(AttractZones.ChargeBandTop));
+            _barRoot.offsetMin = Vector2.zero;
+            _barRoot.offsetMax = Vector2.zero;
+
+            StretchedImage(_barRoot, "ChargeBarFrame", 0f, AttractZones.ChargeFrameColor);
+            _barTrack = StretchedImage(_barRoot, "ChargeBarTrack",
+                AttractZones.ChargeBarBorder, AttractZones.ChargeTrackColor);
+
+            var fillGO = new GameObject("ChargeBarFill", typeof(RectTransform), typeof(Image));
+            fillGO.transform.SetParent(_barTrack, false);
+            _barFill = fillGO.GetComponent<RectTransform>();
+            _barFill.anchorMin = new Vector2(0f, 0f);
+            _barFill.anchorMax = new Vector2(0f, 1f); // full track height, width driven by the charge
+            _barFill.pivot = new Vector2(0f, 0.5f);   // grows from the left edge
+            _barFill.anchoredPosition = Vector2.zero;
+            _barFill.sizeDelta = Vector2.zero;
+            var fillImg = fillGO.GetComponent<Image>();
+            fillImg.color = AttractZones.ChargeColor;
+            fillImg.raycastTarget = false;
+
+            // Notches: fixed gaps in the TRACK's colour, drawn over the fill. Invisible on an empty bar
+            // (slot colour on slot colour) and cutting the amber into steps as it grows.
+            var notch = AttractZones.ChargeTrackColor;
+            notch.a = 1f;
+            for (int i = 1; i < AttractZones.ChargeBarSegments; i++)
+            {
+                float f = (float)i / AttractZones.ChargeBarSegments;
+                var go = new GameObject("Notch", typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(_barTrack, false);
+                var rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = new Vector2(f, 0f);
+                rt.anchorMax = new Vector2(f, 1f);
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.anchoredPosition = Vector2.zero;
+                rt.sizeDelta = new Vector2(AttractZones.ChargeBarSegmentGap, 0f);
+                var img = go.GetComponent<Image>();
+                img.color = notch;
+                img.raycastTarget = false;
+            }
+
+            ApplyChargeBarParent(); // no-op unless the reel was wired in before this build ran
+        }
+
+        // A full-rect Image inside <paramref name="parent"/>, inset by <paramref name="inset"/> on all sides.
+        private static RectTransform StretchedImage(RectTransform parent, string name, float inset, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = new Vector2(inset, inset);
+            rt.offsetMax = new Vector2(-inset, -inset);
+            var img = go.GetComponent<Image>();
+            img.color = color;
+            img.raycastTarget = false;
+            return rt;
         }
 
         // Build the full screen-covering grid once, all cells inactive, and precompute the bottom-row-first
@@ -429,7 +568,9 @@ namespace AiGameStudio.ArcadeHub
             float startX = -gridWidth / 2f + cell / 2f;
             float startY = -gridHeight / 2f + cell / 2f;
             float jitter = cell * jitterFraction;
-            float spriteSize = cell * sizeShrink;
+            // The source animation's fixed sprite size is now the FLOOR of the per-spawn size roll (see
+            // ActivateCell); cells are built at it and re-sized as they are activated.
+            _cellBaseSize = cell * sizeShrink;
 
             for (int r = 0; r < rows; r++)
             {
@@ -442,7 +583,7 @@ namespace AiGameStudio.ArcadeHub
                     rt.anchorMin = new Vector2(0.5f, 0.5f);
                     rt.anchorMax = new Vector2(0.5f, 0.5f);
                     rt.pivot = new Vector2(0.5f, 0.5f);
-                    rt.sizeDelta = new Vector2(spriteSize, spriteSize);
+                    rt.sizeDelta = new Vector2(_cellBaseSize, _cellBaseSize);
                     // r = 0 is the bottom row.
                     Vector2 jitterOffset = new Vector2(
                         Random.Range(-jitter, jitter),
@@ -472,21 +613,6 @@ namespace AiGameStudio.ArcadeHub
                 for (int i = 0; i < rowIndices.Count; i++)
                     _fillOrder[w++] = rowIndices[i];
             }
-        }
-
-        private RectTransform MakeImage(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax,
-            Vector2 pivot, Vector2 anchoredPos, Vector2 size, Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = anchorMin;
-            rt.anchorMax = anchorMax;
-            rt.pivot = pivot;
-            rt.sizeDelta = size;
-            rt.anchoredPosition = anchoredPos;
-            go.GetComponent<Image>().color = color;
-            return rt;
         }
 
         private Text MakeLabel(Transform parent, string name, string text, Vector2 anchor,
@@ -523,8 +649,10 @@ namespace AiGameStudio.ArcadeHub
         {
             if (_machine == null) Build(config);
 
+            // Canvases size their children on the next layout pass; a pose renders immediately, so the
+            // track has to be measurable before the fill is scaled against it.
+            Canvas.ForceUpdateCanvases();
             SetBarFill(charge);
-            _barFill.GetComponent<Image>().color = ColorForSlot(slotIndex);
 
             ClearFlowers();
             _viewSlot = slotIndex;
@@ -535,7 +663,7 @@ namespace AiGameStudio.ArcadeHub
             if (showComingSoon && slotIndex >= 0 && slotIndex < config.slots.Count)
             {
                 _comingSoon.text = $"СКОРО — {config.slots[slotIndex].displayName}";
-                _comingSoon.color = ColorForSlot(slotIndex);
+                _comingSoon.color = AttractZones.ChargeColor;
                 _comingSoon.gameObject.SetActive(true);
             }
         }

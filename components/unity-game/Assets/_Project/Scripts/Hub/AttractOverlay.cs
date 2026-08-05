@@ -26,7 +26,8 @@ namespace AiGameStudio.ArcadeHub
     ///   white. The baked line peaks at luminance 83/255 (a dim grey) and, despite reading like a
     ///   ticker, never moves — it is the same pixels in all 152 frames of the loop. Ours is genuinely
     ///   brighter and genuinely scrolls, right-to-left, seamlessly looped by drawing the string twice
-    ///   end-to-end and wrapping the scroll by one period.
+    ///   end-to-end and wrapping the scroll by one period. It is set in a LIGHT face, not the heavy
+    ///   display one the title uses (founder, 2026-08-05: «текст титров не жирным — он плохо читается»).
     ///
     /// • <b>Title</b> (the clip's old title zone) — the CABINET's name «7 режимов суеты» while nobody
     ///   is playing, and the NAME OF THE GAME a control launches the moment that control is worked.
@@ -35,6 +36,12 @@ namespace AiGameStudio.ArcadeHub
     ///   and the themed rain. Changes are a soft alpha fade (out, swap, in) rather than a hard cut;
     ///   once the control is released and the charge has decayed, the title waits
     ///   <see cref="returnDelay"/> and fades back to the cabinet name.
+    ///
+    /// This component is also the attract screen's single CLOCK: its <see cref="Tick"/> drives the reel's
+    /// own fade-out-and-freeze while a control is being charged (<see cref="AttractVideoScreen.TickEngagement"/>)
+    /// off the very same <see cref="IAttractSlotSource.ActiveSlot"/> reading the title uses — so the reel
+    /// leaving, the title becoming a game's name and the charge bar filling are one movement, and the reel
+    /// returns on exactly the signal that sends the title back to the cabinet name.
     ///
     /// The widgets are parented onto the video's own rect with NORMALISED anchors, so they track the
     /// letterboxed video exactly (see <see cref="AttractZones"/> for the measured geometry). The canvas
@@ -63,8 +70,10 @@ namespace AiGameStudio.ArcadeHub
         [Header("Credits ticker")]
         [Tooltip("Scroll speed in reference pixels per second, right-to-left.")]
         [SerializeField] private float creditsSpeed = 110f;
-        [Tooltip("Ticker font size, in reference pixels (the baked line it replaces is ~24 px tall).")]
-        [SerializeField] private int creditsFontSize = 34;
+        [Tooltip("Ticker font size, in reference pixels (the baked line it replaces is ~24 px tall). A " +
+                 "touch larger than the old display-face setting: the light face reads smaller at the " +
+                 "same nominal size, and the band is 54 px tall, so it costs nothing.")]
+        [SerializeField] private int creditsFontSize = 36;
 
         [Header("Title")]
         [Tooltip("Largest title size; long game names shrink to fit via best-fit.")]
@@ -80,7 +89,9 @@ namespace AiGameStudio.ArcadeHub
         public bool AutoTick = true;
 
         private IAttractSlotSource _source;
+        private AttractVideoScreen _video;
         private Font _font;
+        private Font _creditsFont;
 
         private RectTransform _creditsViewport;
         private readonly Text[] _creditsCopies = new Text[2];
@@ -117,6 +128,12 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>The two end-to-end copies that make the ticker loop seamlessly.</summary>
         public Text[] CreditsCopies => _creditsCopies;
 
+        /// <summary>The light face the ticker is set in — deliberately NOT the heavy display title face.</summary>
+        public Font CreditsFont => _creditsFont;
+
+        /// <summary>The heavy display face the title is set in.</summary>
+        public Font TitleFont => _font;
+
         /// <summary>Current ticker offset, in reference pixels; wraps within one period.</summary>
         public float CreditsScroll => _creditsScroll;
 
@@ -130,6 +147,7 @@ namespace AiGameStudio.ArcadeHub
         public void Bind(AttractVideoScreen video, IAttractSlotSource source)
         {
             _source = source;
+            if (video != null) _video = video;
             if (_title != null) return; // already built
             if (video == null) return;
 
@@ -159,6 +177,18 @@ namespace AiGameStudio.ArcadeHub
             if (dt < 0f) dt = 0f;
             TickCredits(dt);
             TickTitle(dt);
+            TickReel(dt);
+        }
+
+        // The reel fades out and freezes while a control is being charged, and comes back when it is
+        // released. Driven from HERE, off the very same ActiveSlot reading the title uses one line above,
+        // so the picture leaving, the title becoming the game's name and the bar filling are one gesture —
+        // and the reel returns on exactly the signal («ActiveSlot == -1») that starts the title's walk back
+        // to the cabinet name.
+        private void TickReel(float dt)
+        {
+            if (_video == null) return;
+            _video.TickEngagement(_source != null && _source.ActiveSlot >= 0, dt);
         }
 
         private void TickCredits(float dt)
@@ -279,6 +309,13 @@ namespace AiGameStudio.ArcadeHub
             _font = Resources.Load<Font>("Fonts/RussoOne")
                     ?? Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+            // The TICKER does not get the display face. Russo One has a single, heavy weight — glorious at
+            // 130 px for the title, a solid grey smear at 34 px on a line the eye has to read while it
+            // slides past (founder, 2026-08-05: «текст титров не жирным — он плохо читается»). Arimo
+            // Regular (Apache-2.0, full Cyrillic, the studio's Helvetica stand-in) is the light, open
+            // grotesque that line needs. Brightness is unchanged — full white was already approved.
+            _creditsFont = Resources.Load<Font>("Fonts/Arimo-Regular") ?? _font;
+
             BuildCredits(videoRect);
             BuildTitle(videoRect);
         }
@@ -310,7 +347,8 @@ namespace AiGameStudio.ArcadeHub
                 rt.anchoredPosition = Vector2.zero;
 
                 var label = go.GetComponent<Text>();
-                label.font = _font;
+                label.font = _creditsFont;
+                label.fontStyle = FontStyle.Normal; // never bold: the ticker is read on the move
                 label.fontSize = creditsFontSize;
                 label.alignment = TextAnchor.MiddleLeft;
                 label.horizontalOverflow = HorizontalWrapMode.Overflow;

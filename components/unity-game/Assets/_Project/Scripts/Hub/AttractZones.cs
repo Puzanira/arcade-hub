@@ -71,14 +71,81 @@ namespace AiGameStudio.ArcadeHub
         public const float CreditsBandBottom = 64f;
 
         /// <summary>
-        /// Our title's band, centred on the baked title's optical centre (row 207.5) so the replacement
-        /// lands exactly where the eye already expects it, and fully inside the masked region.
+        /// Our title's band. It used to be centred on the baked title's optical centre (row 207.5); the
+        /// founder's «полосу прогрузки вставлять под название» (2026-08-05) moved the charge bar into the
+        /// same reclaimed strip, so the band gives up its bottom 15 rows to open
+        /// <see cref="ChargeBandTop"/>…<see cref="ChargeBandBottom"/> underneath. It is still taller than
+        /// the baked title it replaces (rows 144…271), so the title lost no size — only the empty air
+        /// below it — and title + bar now read as ONE centred block inside the masked region.
         /// </summary>
-        public const float TitleBandTop = 123f;
-        public const float TitleBandBottom = 293f;
+        public const float TitleBandTop = 118f;
+        public const float TitleBandBottom = 278f;
 
         /// <summary>Side margin for the title band, in clip pixels.</summary>
         public const float TitleSideMargin = 50f;
+
+        /// <summary>
+        /// The charge bar's band — directly UNDER the title (founder, 2026-08-05: «полосу прогрузки
+        /// вставлять под название»), no longer stuck to the bottom of the screen. It sits in the last
+        /// clear rows of the reclaimed strip: 8 rows of air under the title, 10 rows of background left
+        /// between it and <see cref="MaskBottom"/>, so the bar never crowds the hands zone.
+        /// </summary>
+        public const float ChargeBandTop = 286f;
+        public const float ChargeBandBottom = 322f;
+
+        /// <summary>The bar's outer (framed) width in clip pixels — narrower than the title, centred.</summary>
+        public const float ChargeBarWidth = 1208f;
+
+        /// <summary>The bar's pixel-art frame thickness, in clip pixels.</summary>
+        public const float ChargeBarBorder = 4f;
+
+        /// <summary>How many notches the fill is cut into (an arcade energy bar, not a smooth gradient).</summary>
+        public const int ChargeBarSegments = 24;
+
+        /// <summary>Width of the gap punched between two notches, in clip pixels.</summary>
+        public const float ChargeBarSegmentGap = 6f;
+
+        // ---- the attract screen's own palette ----
+
+        /// <summary>
+        /// The launcher's charge colour — ONE colour for every slot (founder, 2026-08-05: «полосу
+        /// прогрузки хочется дизайн сделать получше и единого цвета»). Deliberately the amber the
+        /// approved "СКОРО" overlay already uses, so the bar and that overlay read as the same system;
+        /// per-slot identity is carried by the themed rain and by the title, not by the bar.
+        /// </summary>
+        public static readonly UnityEngine.Color ChargeColor = new UnityEngine.Color(1f, 0.85f, 0.2f);
+
+        /// <summary>
+        /// The empty part of the bar: a near-black slot the amber notches punch out of. FULLY opaque — at
+        /// 235 the amber frame behind it bled through and turned the unfilled half a muddy olive instead
+        /// of reading as an empty socket (seen on the first pass of the founder shot).
+        /// </summary>
+        public static readonly UnityEngine.Color ChargeTrackColor = new UnityEngine.Color32(14, 14, 14, 255);
+
+        /// <summary>
+        /// The bar's frame: the charge colour held back to a whisper, so an EMPTY bar is still visibly the
+        /// same object as a full one rather than a stray black rectangle on the reel.
+        /// </summary>
+        public static readonly UnityEngine.Color ChargeFrameColor = new UnityEngine.Color(1f, 0.85f, 0.2f, 0.55f);
+
+        // ---- the reel's own fade (a control is being charged) ----
+
+        /// <summary>
+        /// Seconds the reel takes to fade out when a player starts charging a slot (founder: «выцветают
+        /// (медленно)»). The ramp is linear in time and smoothstepped in alpha, so it leaves and arrives
+        /// without a visible edge.
+        /// </summary>
+        public const float ReelFadeOutSeconds = 1.2f;
+
+        /// <summary>Seconds the reel takes to come back once the control is released («при отжатии все восстанавливается»).</summary>
+        public const float ReelFadeInSeconds = 0.8f;
+
+        /// <summary>
+        /// How far the reel fades: a veil in the clip's OWN background tone, so a faded reel becomes the
+        /// same flat #262626 the masked band already is (no seam at <see cref="MaskBottom"/>, which a
+        /// fade-to-black would tear open) and the hands stay faintly readable behind the charge.
+        /// </summary>
+        public const float ReelFadeMaxAlpha = 0.85f;
 
         /// <summary>Normalised anchor Y (0 = bottom, 1 = top) for a top-down clip row.</summary>
         public static float TopFraction(float clipRow) => 1f - clipRow / ClipHeight;

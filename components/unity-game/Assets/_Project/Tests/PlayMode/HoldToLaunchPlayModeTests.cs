@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -117,6 +118,55 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.AreEqual(0f, _htl.Charge, 1e-3, "released charge decays fully to 0");
             Assert.AreEqual(-1, _htl.ActiveSlot, "slot dropped after full decay");
             Assert.AreEqual(0, _htl.FlowerCount, "the flower pile clears as the charge decays");
+        }
+
+        /// <summary>
+        /// Founder, 2026-08-05: «рандомизация для всех игр размеров ассетов — причем текущих брать как
+        /// самый маленький размер — чтобы было интереснее». Every falling object rolls its OWN size, and
+        /// the size she has already seen is the FLOOR of that roll, never its average: the rain may only
+        /// gain bigger pieces, never smaller ones. The mechanism is shared, so this holds for every slot.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Rain_RollsASizePerObject_WithTheOldSizeAsTheFloor()
+        {
+            yield return LoadMenuAndTakeOver();
+
+            float min = _htl.RainSizeMin;
+            float max = _htl.RainSizeMax;
+            Assert.Greater(min, 1f, "The base (smallest) size must be a real size.");
+            Assert.Greater(max, min * 1.2f,
+                "The roll needs somewhere to go — a range this narrow would not read as variety.");
+
+            for (int i = 0; i < 25; i++)
+                yield return Step(Crank(10f), 0.1f);
+
+            var sizes = new List<float>();
+            foreach (RectTransform flower in _htl.Flowers)
+            {
+                Assert.AreEqual(flower.sizeDelta.x, flower.sizeDelta.y, 0.01f, "Objects stay square.");
+                sizes.Add(flower.sizeDelta.x);
+            }
+            Assert.Greater(sizes.Count, 40, "Enough spawns to judge the spread.");
+
+            var distinct = new HashSet<int>();
+            float smallest = float.MaxValue, biggest = 0f;
+            foreach (float s in sizes)
+            {
+                Assert.GreaterOrEqual(s, min - 0.01f,
+                    "The already-approved size is the FLOOR: nothing in the rain may be smaller than it.");
+                Assert.LessOrEqual(s, max + 0.01f, "…and nothing may exceed the top of the range.");
+                distinct.Add(Mathf.RoundToInt(s));
+                smallest = Mathf.Min(smallest, s);
+                biggest = Mathf.Max(biggest, s);
+            }
+
+            Assert.Greater(distinct.Count, 10,
+                $"Each object rolls its own size — a fixed-size rain collapses to one value (got {distinct.Count} " +
+                "distinct sizes). This is the whole point of «чтобы было интереснее».");
+            Assert.Greater(biggest, min * 1.15f,
+                "The pile must actually contain noticeably bigger pieces, not just a jitter around the floor.");
+            Assert.Less(smallest, min * 1.15f,
+                "…and it must still contain small ones, so the range is genuinely used from the bottom up.");
         }
 
         [UnityTest]

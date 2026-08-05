@@ -22,6 +22,12 @@ namespace AiGameStudio.ArcadeHub
     /// rebuild). It is decoded into a RenderTexture shown by a RawImage on a bottom-sorted canvas,
     /// letterboxed to the video's own aspect (FitInside math; the shipped 1920×1080 clip fills the 16:9
     /// reference exactly). Audio plays through the default output (direct mode) — the attract sound.
+    ///
+    /// The reel also YIELDS while somebody plays with it (founder, 2026-08-05: «при запуске можно ли
+    /// ставить видео на паузу (и с фейдом его)… при отжатии все восстанавливается»): the moment a control
+    /// starts charging a slot the reel fades slowly out behind a veil and, once it is gone, freezes —
+    /// picture and sound both — so the screen belongs to the game's title, the charge bar and the themed
+    /// rain. Releasing the control brings it back, sound and all. See <see cref="TickEngagement"/>.
     /// </summary>
     [AddComponentMenu("Arcade Hub/Attract Video Screen")]
     [DisallowMultipleComponent]
@@ -36,11 +42,14 @@ namespace AiGameStudio.ArcadeHub
         private VideoPlayer _player;
         private RawImage _screen;
         private RectTransform _zoneMask;
+        private Image _veil;
         private RenderTexture _target;
         private bool _built;
         private float _pausedSince = -1f;
         private float _stepAccum;
         private float _retryAccum;
+        private float _fade01;      // 0 = reel at full brightness, 1 = fully faded out
+        private bool _chargePaused; // the reel is deliberately frozen while a control is charged
 
         /// <summary>The video player (test seam: isPlaying / isLooping / frame).</summary>
         public VideoPlayer Player => _player;
@@ -53,6 +62,31 @@ namespace AiGameStudio.ArcadeHub
         /// stop short of the hands).
         /// </summary>
         public RectTransform ZoneMask => _zoneMask;
+
+        /// <summary>
+        /// The veil that fades the reel out while a control is being charged (test seam: its alpha, and
+        /// the fact that it sits UNDER the launcher's own title/ticker/bar but OVER the reel).
+        /// </summary>
+        public Image Veil => _veil;
+
+        /// <summary>
+        /// How far the reel is currently faded out, 0 (playing, full brightness) … 1 (fully veiled).
+        /// Ramps over <see cref="AttractZones.ReelFadeOutSeconds"/> /
+        /// <see cref="AttractZones.ReelFadeInSeconds"/>; the drawn alpha is this smoothstepped and scaled
+        /// by <see cref="AttractZones.ReelFadeMaxAlpha"/>.
+        /// </summary>
+        public float FadeAmount => _fade01;
+
+        /// <summary>The veil's actual drawn alpha (test seam: what the eye sees, not the raw ramp).</summary>
+        public float VeilAlpha => _veil != null ? _veil.color.a : 0f;
+
+        /// <summary>
+        /// True while the reel is deliberately frozen — picture AND sound — because a player is charging
+        /// a slot (founder, 2026-08-05: «при запуске можно ли ставить видео на паузу (и с фейдом его)»).
+        /// This is NOT the unfocused-editor stall: while it is set, the step fallback is disabled outright
+        /// so nothing creeps the paused clip forward behind the player's back.
+        /// </summary>
+        public bool IsChargePaused => _chargePaused;
 
         /// <summary>True once the clip is prepared and actively playing.</summary>
         public bool IsPlaying => _player != null && _player.isPlaying;
@@ -97,6 +131,12 @@ namespace AiGameStudio.ArcadeHub
         private void Update()
         {
             if (_player == null || !_player.isPrepared) return;
+
+            // Frozen on purpose while a control is charged: the whole watchdog below exists to rescue a
+            // reel that WANTS to play and cannot, and it recognises that state as "not playing". Without
+            // this gate it would read our own Pause() as the macOS stall and step the clip forward
+            // silently — a "paused" video whose frames keep advancing.
+            if (_chargePaused) return;
 
             if (_player.isPlaying)
             {
@@ -166,6 +206,72 @@ namespace AiGameStudio.ArcadeHub
             }
         }
 
+        // -------- the reel's fade + freeze while a control is charged --------
+
+        /// <summary>
+        /// Drive the reel's engagement state one frame. <paramref name="engaged"/> is the SAME signal the
+        /// title and the charge bar run on (<see cref="IAttractSlotSource.ActiveSlot"/> ≥ 0), so the reel
+        /// fading out, the title turning into the game's name and the bar appearing are one movement, and
+        /// the reel comes back on exactly the signal the title returns to the cabinet name on.
+        ///
+        /// Called from <see cref="AttractOverlay.Tick"/> rather than from this component's own
+        /// <see cref="Update"/>: one driver, one clock, and the PlayMode tests that already step the
+        /// overlay with a fixed dt step the fade deterministically too.
+        ///
+        /// The clip is paused only once it has FULLY faded out — pausing on the first frame of the fade
+        /// would cut the attract sound dead while the picture was still leaving.
+        /// </summary>
+        public void TickEngagement(bool engaged, float dt)
+        {
+            if (dt < 0f) dt = 0f;
+
+            float perSecond = engaged
+                ? 1f / Mathf.Max(0.01f, AttractZones.ReelFadeOutSeconds)
+                : 1f / Mathf.Max(0.01f, AttractZones.ReelFadeInSeconds);
+            _fade01 = Mathf.MoveTowards(_fade01, engaged ? 1f : 0f, perSecond * dt);
+            ApplyFade();
+
+            if (_player == null || !_player.isPrepared) return;
+
+            if (engaged)
+            {
+                if (!_chargePaused && _fade01 >= 1f)
+                {
+                    _chargePaused = true;
+                    // Leave the stall watchdog in a clean state: while paused it is gated off entirely,
+                    // and on release it must start judging the clock from scratch.
+                    FallbackStepping = false;
+                    _pausedSince = -1f;
+                    _retryAccum = 0f;
+                    _stepAccum = 0f;
+                    _player.Pause();
+                }
+                return;
+            }
+
+            if (_chargePaused)
+            {
+                _chargePaused = false;
+                _pausedSince = -1f;
+                _retryAccum = 0f;
+                _stepAccum = 0f;
+                _player.Play(); // sound and picture return together as the veil lifts
+            }
+        }
+
+        private void ApplyFade()
+        {
+            if (_veil == null) return;
+            Color c = AttractZones.BackgroundColor;
+            // Smoothstep the drawn alpha: a linear alpha ramp reads as a hard start and a hard stop, and
+            // the founder asked for the reel to leave SLOWLY.
+            c.a = AttractZones.ReelFadeMaxAlpha * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(_fade01));
+            _veil.color = c;
+            // An idle attract screen draws no veil at all, not a transparent full-screen quad.
+            if (_veil.enabled != (c.a > 0.001f))
+                _veil.enabled = c.a > 0.001f;
+        }
+
         private void BuildView()
         {
             var canvasGO = new GameObject("AttractVideoCanvas",
@@ -189,6 +295,29 @@ namespace AiGameStudio.ArcadeHub
             _screen.color = Color.black; // black until the first decoded frame arrives
 
             BuildZoneMask();
+            BuildVeil();
+        }
+
+        // The fade-out layer for "somebody is charging a slot". It is a PANEL over the reel rather than a
+        // tint on the RawImage for one measured reason: multiplying the video's own colour drives it to
+        // BLACK, while the zone mask above it stays #262626 — which tears a hard seam across the screen at
+        // MaskBottom exactly when the player is looking hardest. A veil in the clip's own background tone
+        // covers reel and mask alike, so a fully faded screen is one flat #262626 field with the title,
+        // the bar and the rain on it. Built here, before AttractOverlay adds its widgets, so it sits UNDER
+        // the launcher's own title/ticker/charge bar — those must stay bright while the reel leaves.
+        private void BuildVeil()
+        {
+            var go = new GameObject("ReelVeil", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(_screen.transform, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            _veil = go.GetComponent<Image>();
+            _veil.raycastTarget = false;
+            _veil.enabled = false;
+            ApplyFade();
         }
 
         // The founder's "only the red zone stays visible" rule (2026-08-05). One opaque panel in the

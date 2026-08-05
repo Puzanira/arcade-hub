@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -311,6 +312,265 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.AreEqual(1f, _overlay.TitleAlpha, 1e-3f, "…fully opaque again.");
         }
 
+        // ---------------- the ticker's face ----------------
+
+        [UnityTest]
+        public IEnumerator Credits_AreSetInALightFace_NeverTheHeavyTitleOne()
+        {
+            yield return LoadAttractScreen();
+
+            // The founder read the first cut and could not: «текст титров не жирным — он плохо читается».
+            // Russo One has ONE weight, and it is a display weight — right for a 130 px title, a grey smear
+            // on a 36 px line that slides past the eye. So the ticker gets its own light face, and the
+            // check is not "is fontStyle bold" (it never was) but "is this the SAME face as the title".
+            Assert.IsNotNull(_overlay.CreditsFont, "The ticker must have a font.");
+            Assert.IsNotNull(_overlay.TitleFont, "The title must have a font.");
+            Assert.AreNotSame(_overlay.TitleFont, _overlay.CreditsFont,
+                "The ticker must NOT be set in the heavy display face the title uses — that is the " +
+                "unreadable line the founder rejected. (If the light face failed to load, the overlay " +
+                "falls back to the title face, and this is what catches it.)");
+
+            foreach (Text c in _overlay.CreditsCopies)
+            {
+                Assert.AreSame(_overlay.CreditsFont, c.font, "Both ticker copies use the light face.");
+                Assert.AreEqual(FontStyle.Normal, c.fontStyle, "The ticker is never emboldened on top.");
+            }
+
+            // Brightness is NOT part of this change — «поярче» was accepted and stays.
+            Assert.AreEqual(1f, _overlay.CreditsCopies[0].color.a, 1e-3f, "The ticker stays at full white.");
+        }
+
+        // ---------------- the reel yields while a control is charged ----------------
+
+        // The engaged reel contract needs a decoder; a batch editor that never prepares the clip cannot
+        // exercise the freeze half and says so instead of passing vacuously.
+        private static void RequirePreparedOrBatchIgnore(AttractVideoScreen video)
+        {
+            if (Application.isBatchMode && (video.Player == null || !video.Player.isPrepared))
+                Assert.Ignore("VideoPlayer never prepared in -batchmode; the reel freeze/resume contract " +
+                              "is covered by the live-editor run.");
+        }
+
+        [UnityTest]
+        public IEnumerator Reel_FadesOutSlowly_ThenFreezes_WhileAControlIsCharged()
+        {
+            yield return LoadAttractScreen();
+            AttractVideoScreen video = _host.Video;
+            yield return WaitRealtime(() => video.IsShowingFrames && video.Player.frame > 0, 20f);
+
+            Assert.AreEqual(0f, video.FadeAmount, 1e-3f, "An idle attract screen shows the reel in full.");
+            Assert.IsFalse(video.IsChargePaused, "Idle: the reel runs.");
+            Assert.IsFalse(video.Veil.enabled, "Idle: no veil is drawn at all, not even a transparent one.");
+
+            EngageCrank();
+
+            // HALF a fade in: visibly on its way out, and still running. This is the "медленно" half of the
+            // spec — a fade that had already finished by now would be a cut.
+            _overlay.Tick(AttractZones.ReelFadeOutSeconds * 0.5f);
+            Assert.Greater(video.FadeAmount, 0.35f, "The fade is under way…");
+            Assert.Less(video.FadeAmount, 0.85f, "…and nowhere near finished after half its duration.");
+            Assert.IsTrue(video.Veil.enabled, "A fading reel draws its veil.");
+            Assert.Greater(video.VeilAlpha, 0.05f, "The veil is visibly dimming the reel.");
+            Assert.IsFalse(video.IsChargePaused,
+                "The reel freezes only once it has FULLY faded — pausing on the first frame would cut the " +
+                "attract sound dead while the picture was still leaving.");
+
+            RequirePreparedOrBatchIgnore(video);
+
+            for (int i = 0; i < 60 && !video.IsChargePaused; i++) _overlay.Tick(0.05f);
+
+            Assert.IsTrue(video.IsChargePaused, "A charged control freezes the reel.");
+            Assert.AreEqual(1f, video.FadeAmount, 1e-3f, "…with the fade complete.");
+            Assert.AreEqual(AttractZones.ReelFadeMaxAlpha, video.VeilAlpha, 1e-3f,
+                "The veil settles at its full strength.");
+            Assert.IsFalse(video.Player.isPlaying,
+                "Frozen means the VideoPlayer clock is stopped — which is what stops the sound too.");
+            Assert.IsFalse(video.FallbackStepping,
+                "The unfocused-editor step fallback must be OFF while we hold the clip paused.");
+
+            // The failure this really guards: our Pause() looks exactly like the macOS "clock refused to
+            // start" stall the watchdog exists to rescue, so an ungated watchdog would quietly step the
+            // paused clip forward frame by frame — a paused video that keeps playing.
+            long frozenAt = video.Player.frame;
+            for (int i = 0; i < 12; i++)
+            {
+                _overlay.Tick(0.05f);
+                yield return null;
+            }
+            Assert.AreEqual(frozenAt, video.Player.frame,
+                "A frozen reel must not advance a single frame while the control is held.");
+        }
+
+        [UnityTest]
+        public IEnumerator Reel_ComesBack_WhenTheControlIsReleased()
+        {
+            yield return LoadAttractScreen();
+            AttractVideoScreen video = _host.Video;
+            yield return WaitRealtime(() => video.IsShowingFrames && video.Player.frame > 0, 20f);
+            RequirePreparedOrBatchIgnore(video);
+
+            EngageCrank();
+            for (int i = 0; i < 60 && !video.IsChargePaused; i++) _overlay.Tick(0.05f);
+            Assert.IsTrue(video.IsChargePaused, "Precondition: the reel is frozen.");
+
+            // Let go. The charge decays and the machine drops the slot — the SAME signal that starts the
+            // title's walk back to the cabinet name.
+            for (int i = 0; i < 30 && _htl.ActiveSlot >= 0; i++)
+            {
+                _fake.Next = Neutral;
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+            }
+            Assert.AreEqual(-1, _htl.ActiveSlot, "Precondition: nothing is being worked any more.");
+
+            _overlay.Tick(0.05f);
+            Assert.IsFalse(video.IsChargePaused,
+                "Release resumes the clip at once — picture and sound come back together as the veil lifts, " +
+                "rather than the sound waiting out the fade-in in silence.");
+            Assert.Less(video.FadeAmount, 1f, "…and the veil starts lifting on that very same signal.");
+
+            for (int i = 0; i < 60 && video.FadeAmount > 0f; i++) _overlay.Tick(0.05f);
+            Assert.AreEqual(0f, video.FadeAmount, 1e-3f, "The reel comes all the way back.");
+            Assert.AreEqual(0f, video.VeilAlpha, 1e-3f);
+            Assert.IsFalse(video.Veil.enabled, "…and stops drawing the veil entirely.");
+
+            yield return WaitRealtime(() => video.IsShowingFrames, 20f);
+            Assert.IsTrue(video.IsShowingFrames,
+                "After the release the reel presents frames again (clock playback, or the step fallback in " +
+                "an unfocused editor).");
+            if (Application.isFocused && !Application.isBatchMode)
+                Assert.IsTrue(video.Player.isPlaying,
+                    "Focused editor / cabinet: the reel resumes on the real clock — with its sound.");
+        }
+
+        // ---------------- the charge bar lives under the title ----------------
+
+        // Charge the crank one visible step and hand back the bar's live rect.
+        private void ChargeCrankAStep()
+        {
+            EngageCrank();
+            _fake.Next = new BackendSnapshot { CrankDeltaDegrees = 10f };
+            ArcadeInput.Update(0.1f);
+            _htl.Tick(0.1f);
+        }
+
+        [UnityTest]
+        public IEnumerator ChargeBar_SitsUnderTheTitle_InsideTheReclaimedBand()
+        {
+            yield return LoadAttractScreen();
+
+            RectTransform bar = _htl.ChargeBar;
+            Assert.IsNotNull(bar, "The charge bar must be built.");
+            Assert.IsTrue(bar.IsChildOf(_host.Video.Screen.transform),
+                "The bar hangs off the REEL's rect, not off the full-screen overlay canvas: it is placed in " +
+                "clip-row space under the title, and the reel is letterboxed — anchored to the screen it " +
+                "would drift away from the title on anything but a perfect 16:9 surface.");
+
+            ChargeCrankAStep();
+            Assert.IsTrue(bar.gameObject.activeInHierarchy, "A charging slot shows the bar.");
+
+            var videoRect = (RectTransform)_host.Video.Screen.transform;
+            ClipRowsOf(bar, videoRect, out float top, out float bottom);
+            ClipRowsOf((RectTransform)_overlay.TitleLabel.transform, videoRect,
+                out float titleTop, out float titleBottom);
+
+            Assert.GreaterOrEqual(top, titleBottom - 1f,
+                "«полосу прогрузки вставлять под название»: the bar starts below the title's band, not across it.");
+            Assert.Less(bottom, AttractZones.MaskBottom,
+                "The bar stays inside the band the launcher reclaimed from the clip.");
+            Assert.Less(bottom, AttractZones.HandsTop,
+                "…and therefore never covers the hands — the one zone the founder keeps visible.");
+            Assert.Less(bottom, AttractZones.ClipHeight * 0.5f,
+                "The bar is no longer a bottom-of-screen HUD element: it lives in the upper band with the title.");
+            Assert.Greater(titleTop, 0f, "Sanity: the title band is on screen.");
+
+            // Visible, not merely positioned.
+            Assert.Greater(bar.rect.width, 400f, "The bar has real width on screen.");
+            Assert.Greater(bar.rect.height, 10f, "The bar has real height on screen.");
+            Assert.Greater(_htl.BarFill.rect.width, 1f, "A charging bar has drawn some fill.");
+            Assert.Less(_htl.BarFill.rect.width, _htl.ChargeBarTrack.rect.width + 1f,
+                "The fill can never exceed its track.");
+        }
+
+        private static void AssertSameColor(Color expected, Color actual, string because)
+        {
+            Assert.AreEqual(expected.r, actual.r, 1f / 255f, $"{because} (red)");
+            Assert.AreEqual(expected.g, actual.g, 1f / 255f, $"{because} (green)");
+            Assert.AreEqual(expected.b, actual.b, 1f / 255f, $"{because} (blue)");
+            Assert.AreEqual(expected.a, actual.a, 1f / 255f, $"{because} (alpha)");
+        }
+
+        [UnityTest]
+        public IEnumerator ChargeBar_IsOneColour_WhicheverSlotIsCharging()
+        {
+            yield return LoadAttractScreen();
+            var fill = _htl.BarFill.GetComponent<Image>();
+            Assert.IsNotNull(fill, "The fill is an Image.");
+
+            ChargeCrankAStep();
+            Assert.AreEqual(SisyphusSlot, _htl.ActiveSlot, "Precondition: the crank owns the bar.");
+            Color onCrank = fill.color;
+
+            // Hand the bar over to a DIFFERENT slot with a different slot colour.
+            for (int i = 0; i < 30 && _htl.ActiveSlot >= 0; i++)
+            {
+                _fake.Next = Neutral;
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+            }
+            for (int i = 0; i < 5; i++)
+            {
+                _fake.Next = new BackendSnapshot { GreenHeld = true };
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+            }
+            Assert.GreaterOrEqual(_htl.ActiveSlot, 0, "A second control must own the bar now.");
+            Assert.AreNotEqual(SisyphusSlot, _htl.ActiveSlot, "…and it must be a different slot.");
+            Color onGreen = fill.color;
+
+            AssertSameColor(onCrank, onGreen,
+                "The bar is ONE colour for every slot (founder: «единого цвета») — which game is charging " +
+                "is said by the title above it and by the themed rain, not by repainting the bar");
+            AssertSameColor(AttractZones.ChargeColor, onGreen, "The bar uses the launcher's single charge colour");
+
+            // …and the one other thing a charge can end in wears the same colour, so the planned-slot
+            // ending reads as the same system rather than a seventh slot tint.
+            AssertSameColor(AttractZones.ChargeColor, _htl.ComingSoonLabel.color,
+                "The «СКОРО» overlay shares the bar's colour");
+        }
+
+        [UnityTest]
+        public IEnumerator PlannedSlot_ChargesTheSameBar_AndEndsInTheSameColour()
+        {
+            yield return LoadAttractScreen();
+
+            // Bang = «Таблетка в космосе», a planned slot: it charges the bar exactly like an installed one
+            // and, at full, swaps the launch for the "СКОРО" line and resets.
+            int guard = 0;
+            while (!_htl.ComingSoonVisible && guard < 120)
+            {
+                _fake.Next = new BackendSnapshot { BangHeld = true };
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+                _overlay.Tick(0.1f);
+                if (_htl.Charge > 0.2f && _htl.Charge < 0.9f)
+                {
+                    Assert.IsTrue(_htl.ChargeBar.gameObject.activeInHierarchy,
+                        "A planned slot charges the very same bar an installed one does.");
+                    AssertSameColor(AttractZones.ChargeColor, _htl.BarFill.GetComponent<Image>().color,
+                        "A planned slot's charge is the same single colour");
+                }
+                guard++;
+            }
+
+            Assert.IsTrue(_htl.ComingSoonVisible, "A planned slot at full charge shows the СКОРО overlay.");
+            StringAssert.Contains("Таблетка в космосе", _htl.ComingSoonLabel.text);
+            AssertSameColor(AttractZones.ChargeColor, _htl.ComingSoonLabel.color,
+                "«СКОРО» wears the charge colour, not a per-slot one");
+            Assert.Less(_htl.Charge, 0.1f, "The bar resets behind the overlay.");
+            Assert.IsFalse(_htl.BarFill.gameObject.activeSelf, "…and disappears with the charge.");
+        }
+
         // ---------------- founder-facing contract screenshots ----------------
 
         // Wall-clock wait: decode runs on a real-time background thread while an unfocused editor spins
@@ -332,24 +592,52 @@ namespace AiGameStudio.ArcadeHub.Tests
         {
             Color32[] px = tex.GetPixels32();
             int w = tex.width, h = tex.height;
-            int bright = 0;
-            for (int row = topRow; row <= bottomRow; row++)
+
+            // LOCAL contrast, not an absolute brightness cut. Two things broke the absolute version:
+            // a post-processing vignette on the scene's camera crushes the band's corners to pure black
+            // (so genuinely painted white text lands under any fixed threshold), and the charge bar's
+            // amber has a blue channel of 51 (so a "bright in all channels" test calls a perfectly drawn
+            // bar invisible). Comparing each pixel against the MEDIAN of its own narrow column block
+            // measures what the eye actually judges — "is there something here that the background is
+            // not" — and survives any slow gradient across the frame while still reading zero on an
+            // empty band.
+            const int Blocks = 32;
+            const int Contrast = 45;
+            int blockWidth = Mathf.Max(1, w / Blocks);
+            var levels = new List<int>();
+            int ink = 0;
+
+            for (int b = 0; b < Blocks; b++)
             {
-                int y = h - 1 - row; // ReadPixels is bottom-up; clip rows are top-down
-                if (y < 0 || y >= h) continue;
-                for (int x = 0; x < w; x++)
+                int x0 = b * blockWidth;
+                int x1 = Mathf.Min(w, x0 + blockWidth);
+                levels.Clear();
+                for (int row = topRow; row <= bottomRow; row++)
                 {
-                    Color32 p = px[y * w + x];
-                    // The reel's background is #262626; our text is white.
-                    if (p.r > 120 && p.g > 120 && p.b > 120) bright++;
+                    int y = h - 1 - row; // ReadPixels is bottom-up; clip rows are top-down
+                    if (y < 0 || y >= h) continue;
+                    for (int x = x0; x < x1; x++)
+                    {
+                        Color32 p = px[y * w + x];
+                        levels.Add(Mathf.Max(p.r, Mathf.Max(p.g, p.b)));
+                    }
                 }
+                if (levels.Count == 0) continue;
+
+                levels.Sort();
+                int background = levels[levels.Count / 2];
+                foreach (int v in levels)
+                    if (v > background + Contrast) ink++;
             }
-            Assert.Greater(bright, 200,
-                $"{what}: clip rows {topRow}-{bottomRow} must actually be PAINTED (found {bright} bright pixels). " +
-                "A correctly-built but invisible widget is the bug this guards.");
+
+            Assert.Greater(ink, 200,
+                $"{what}: clip rows {topRow}-{bottomRow} must actually be PAINTED (found {ink} pixels " +
+                "standing out from their local background). A correctly-built but invisible widget is the " +
+                "bug this guards.");
         }
 
-        private IEnumerator Capture(string fileName, int inkTopRow = -1, int inkBottomRow = -1, string inkWhat = null)
+        private IEnumerator Capture(string fileName, int inkTopRow = -1, int inkBottomRow = -1,
+            string inkWhat = null)
         {
             if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
                 yield break;
@@ -454,6 +742,76 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsTrue(_htl.BarFill.gameObject.activeSelf, "Capture (c) shows the charge bar.");
             Debug.Log($"[attract-v2] engaged shot: charge={_htl.Charge:F2}, flowers={_htl.FlowerCount}");
             yield return Capture("attract-v2-c-engaged.png");
+        }
+
+        /// <summary>
+        /// The three states of the 2026-08-05 doводка, in one pass: idle with the reel running, a control
+        /// half-charged with the reel faded out and frozen and the new bar sitting under the title, and the
+        /// screen after the control was let go and everything came back.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Capture_AttractV3_ReelFade_And_BarUnderTitle()
+        {
+            yield return LoadAttractScreen();
+
+            AttractVideoScreen video = _host.Video;
+            yield return WaitRealtime(() => video.IsShowingFrames && video.Player.frame > 0, 20f);
+            if (Application.isBatchMode && (!video.IsShowingFrames || video.Player.frame <= 0))
+                Assert.Ignore("VideoPlayer produced no frames in -batchmode; the visual gate runs in the live editor.");
+
+            video.Player.frame = 20; // a frame whose hands are all drawn
+            yield return WaitRealtime(() => System.Math.Abs(video.Player.frame - 20) < 30, 10f);
+
+            _overlay.AutoTick = true;
+            yield return null;
+            yield return null;
+            _overlay.AutoTick = false;
+            _overlay.Tick(1.5f); // let the ticker drift off its start position
+
+            // (a) idle — reel at full brightness, cabinet's name, no bar.
+            Assert.AreEqual(0f, video.FadeAmount, 1e-3f, "(a) the reel is not faded at idle.");
+            Assert.AreEqual(AttractOverlay.CabinetName, _overlay.ShownTitle);
+            Assert.IsFalse(_htl.BarFill.gameObject.activeSelf, "(a) idle shows no bar.");
+            yield return Capture("attract-v3-a-idle.png",
+                (int)AttractZones.CreditsBandTop, (int)AttractZones.CreditsBandBottom,
+                "the credits ticker in its new light face");
+
+            // (b) ~50 % charge — the reel has faded out and frozen, the bar is filling under the title,
+            // the themed rain is piling over both.
+            for (int i = 0; i < 25; i++)
+            {
+                _fake.Next = new BackendSnapshot { CrankDeltaDegrees = 10f };
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+                _overlay.Tick(0.1f);
+            }
+            Assert.AreEqual(0.5f, _htl.Charge, 0.08f, "(b) poses roughly a half charge.");
+            Assert.AreEqual(_htl.Config.slots[SisyphusSlot].displayName, _overlay.ShownTitle);
+            Assert.AreEqual(1f, video.FadeAmount, 1e-3f, "(b) the reel has fully faded out by half a charge.");
+            Assert.IsTrue(video.IsChargePaused, "(b) …and is frozen.");
+            Assert.Greater(_htl.FlowerCount, 0, "(b) the themed rain is falling.");
+            Debug.Log($"[attract-v3] charging shot: charge={_htl.Charge:F2}, veilAlpha={video.VeilAlpha:F2}, " +
+                      $"flowers={_htl.FlowerCount}, rainSize={_htl.RainSizeMin:F0}…{_htl.RainSizeMax:F0}");
+            yield return Capture("attract-v3-b-charging.png",
+                (int)AttractZones.ChargeBandTop, (int)AttractZones.ChargeBandBottom,
+                "the charge bar in the band under the title");
+
+            // (c) released — the veil lifts, the reel plays again, the bar is gone.
+            for (int i = 0; i < 30 && _htl.ActiveSlot >= 0; i++)
+            {
+                _fake.Next = Neutral;
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+                _overlay.Tick(0.1f);
+            }
+            for (int i = 0; i < 60 && video.FadeAmount > 0f; i++) _overlay.Tick(0.05f);
+            Assert.AreEqual(0f, video.FadeAmount, 1e-3f, "(c) the reel came all the way back.");
+            Assert.IsFalse(video.IsChargePaused, "(c) …and is running again.");
+            Assert.IsFalse(_htl.BarFill.gameObject.activeSelf, "(c) the bar cleared with the charge.");
+            yield return WaitRealtime(() => video.IsShowingFrames, 15f);
+            yield return Capture("attract-v3-c-restored.png",
+                (int)AttractZones.CreditsBandTop, (int)AttractZones.CreditsBandBottom,
+                "the credits ticker with the reel restored");
         }
 
         [UnityTest]

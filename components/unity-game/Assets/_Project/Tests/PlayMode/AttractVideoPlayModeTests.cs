@@ -49,6 +49,22 @@ namespace AiGameStudio.ArcadeHub.Tests
             TakeOverInput();
         }
 
+        [UnityTest]
+        public IEnumerator MenuEntry_RestoresGlobalAudio_AfterAGameLeftItMuted()
+        {
+            // AudioListener.volume/pause are process-global. A game with its own mute (Sisyphus) that
+            // is exited through the MenuButton watchdog never restores them — the menu entry must,
+            // or every following game plays silent while the Direct-audio attract reel keeps sounding.
+            AudioListener.volume = 0f;
+            AudioListener.pause = true;
+
+            yield return LoadAttractScreen();
+
+            Assert.AreEqual(1f, AudioListener.volume, 1e-4f,
+                "menu entry must hand the next game a live mixer (volume restored)");
+            Assert.IsFalse(AudioListener.pause, "menu entry must clear a leaked global audio pause");
+        }
+
         private static AttractVideoScreen FindVideo()
         {
             var host = UnityEngine.Object.FindAnyObjectByType<HubMenuController>();
