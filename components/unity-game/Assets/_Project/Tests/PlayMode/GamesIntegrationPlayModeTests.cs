@@ -13,7 +13,7 @@ using AiGameStudio.ArcadeHub;
 namespace AiGameStudio.ArcadeHub.Tests
 {
     /// <summary>
-    /// all-games-wiring (founder's layout 2026-07-26): the launcher runs FIVE real games. Drives the whole
+    /// all-games-wiring (founder's layout 2026-07-26): the launcher runs SIX real games. Drives the whole
     /// loop headless with a <see cref="FakeBackend"/> — menu → game scene → back to the menu — for every
     /// installed slot, entering each the ONLY way the cabinet launches (founder's gate-2 decision:
     /// instant-select is gone): holding/cranking the slot's OWN control until the hold-to-launch charge
@@ -37,13 +37,16 @@ namespace AiGameStudio.ArcadeHub.Tests
         private static BackendSnapshot MenuHeld => new BackendSnapshot { MenuHeld = true };
         private static readonly BackendSnapshot Neutral = default;
 
-        // The five installed slots' OWN controls in the shipped founder layout — the launch gesture is
+        // The six installed slots' OWN controls in the shipped founder layout — the launch gesture is
         // "engage this control until the charge is full" (the only launch path).
         private static BackendSnapshot HoldSisyphus => new BackendSnapshot { CrankDeltaDegrees = 10f }; // Crank
         private static BackendSnapshot HoldFactory => new BackendSnapshot { RedHeld = true };           // RedButton
         private static BackendSnapshot HoldLifeChoices => new BackendSnapshot { GreenHeld = true };     // GreenButton
         private static BackendSnapshot HoldLadyBug => new BackendSnapshot { HeightA = 1f };             // HeightA
         private static BackendSnapshot HoldHomeAlone => new BackendSnapshot { HeightB = 1f };           // HeightB
+        // Joystick: the slot engages on deflection MAGNITUDE past the tuning threshold (0.5), so a full
+        // push on one axis is the gesture — the same "hold your own control" rule as the buttons.
+        private static BackendSnapshot HoldMeditation => new BackendSnapshot { Joystick = Vector2.up };  // Joystick
 
         // Replace whatever backend the current scene's runner installed with a code-driven fake we pump.
         // NEVER destroys the watchdog's own runner: for nativeInput games it is the production return path
@@ -258,6 +261,19 @@ namespace AiGameStudio.ArcadeHub.Tests
             yield return RunGame(HoldHomeAlone, "Apartment", "HomeAlone", "hub-into-homealone.png", nativeInput: false);
         }
 
+        [UnityTest]
+        public IEnumerator Meditation_LaunchesByJoystickHold_IsAlive_ReturnsByMenuButton()
+        {
+            // ArcadeInput-native, and its entry scene carries its own ArcadeInputRunner — so the slot is
+            // nativeInput:false and the watchdog must NOT bring a second pump (a doubled pump would count
+            // every crank degree twice, which on this game is the whole collection mechanic).
+            //
+            // The game answers the same MenuButton press itself, by ending its run and standing its title
+            // back up IN PLACE: it loads no scene, so the launcher's watchdog is the only thing deciding
+            // where the cabinet goes next. That is what makes this return unambiguous.
+            yield return RunGame(HoldMeditation, "Game", "Meditation", "hub-into-meditation.png", nativeInput: false);
+        }
+
         // ---------------- founder's gate-2 regression: red press must NOT instant-launch ----------------
 
         [UnityTest]
@@ -346,6 +362,11 @@ namespace AiGameStudio.ArcadeHub.Tests
 
             var rt = new RenderTexture(W, H, 24, RenderTextureFormat.ARGB32);
             cam.targetTexture = rt;
+            // NB: this shoots 1920×1080 no matter how big the editor's Game view is, and a game that
+            // letterboxes its own fixed design frame to the SCREEN (Медитация: DesignStage.Fit) therefore
+            // lands in the middle of the shot at Screen/1920 of its size. That is the game reading the
+            // surface it was actually given, not a broken picture — on the cabinet the screen IS 1920×1080
+            // and the frame is full. Judge composition from that game's own 1920×1080 frames.
             cam.Render();
 
             var prev = RenderTexture.active;

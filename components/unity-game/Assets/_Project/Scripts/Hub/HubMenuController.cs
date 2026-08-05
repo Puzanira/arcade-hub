@@ -19,9 +19,13 @@ namespace AiGameStudio.ArcadeHub
     public sealed class HubMenuController : MonoBehaviour
     {
         private AttractVideoScreen _video;
+        private AttractOverlay _overlay;
 
         /// <summary>The attract video screen built by this controller (test seam).</summary>
         public AttractVideoScreen Video => _video;
+
+        /// <summary>The credits ticker + fading title drawn into the reclaimed band (test seam).</summary>
+        public AttractOverlay Overlay => _overlay;
 
         private void Start()
         {
@@ -36,6 +40,15 @@ namespace AiGameStudio.ArcadeHub
             var videoGO = new GameObject("AttractVideo");
             videoGO.transform.SetParent(transform, false);
             _video = videoGO.AddComponent<AttractVideoScreen>();
+
+            // attract-screen v2: everything above the reel's hands zone is masked out and redrawn by us —
+            // our own brighter credits ticker and the title that names whichever game the player's control
+            // launches. It reads the active slot straight off the hold-to-launch controller, so the title,
+            // the charge bar and the themed rain can never name different games.
+            var overlayGO = new GameObject("AttractOverlay");
+            overlayGO.transform.SetParent(transform, false);
+            _overlay = overlayGO.AddComponent<AttractOverlay>();
+            _overlay.Bind(_video, FindAnyObjectByType<HoldToLaunchController>());
         }
     }
 }

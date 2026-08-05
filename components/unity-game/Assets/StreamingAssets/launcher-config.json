@@ -2,7 +2,7 @@
   "slots": [
     {
       "controlName": "Crank",
-      "displayName": "Endless Sisyphus",
+      "displayName": "Бесконечный Сизиф",
       "entryScene": "Packages/com.aigamestudio.game-endless-sisyphus/Scenes/Main",
       "status": "installed",
       "rainSprite": "RainSprites/Boulder",
@@ -10,7 +10,7 @@
     },
     {
       "controlName": "RedButton",
-      "displayName": "Последняя смена (Factory)",
+      "displayName": "Завод",
       "entryScene": "Boot",
       "status": "installed",
       "nativeInput": true,
@@ -18,28 +18,28 @@
     },
     {
       "controlName": "GreenButton",
-      "displayName": "Life Choices",
+      "displayName": "Спасибо, не надо",
       "entryScene": "ThanksNoThanks",
       "status": "installed",
       "rainSprite": "RainSprites/ChoiceCard"
     },
     {
       "controlName": "BangButton",
-      "displayName": "Arcade Prototype",
+      "displayName": "Таблетка в космосе",
       "entryScene": "",
       "status": "soon",
       "rainSprite": "RainSprites/ArcadeStar"
     },
     {
       "controlName": "Joystick",
-      "displayName": "Медитация",
-      "entryScene": "",
-      "status": "soon",
+      "displayName": "Медитация в спешке",
+      "entryScene": "Packages/com.aigamestudio.game-meditation/Scenes/Game",
+      "status": "installed",
       "rainSprite": "RainSprites/ZenStones"
     },
     {
       "controlName": "HeightA",
-      "displayName": "Lady Bug",
+      "displayName": "Lady Bug Hit The Road",
       "entryScene": "Packages/com.aigamestudio.game-lady-bug/Scenes/Main",
       "status": "installed",
       "nativeInput": true,
@@ -58,7 +58,7 @@
     },
     {
       "controlName": "HeightB",
-      "displayName": "Home Alone",
+      "displayName": "Кошачьи будни",
       "entryScene": "Apartment",
       "status": "installed",
       "rainSprite": "RainSprites/CatPaw"

@@ -3,6 +3,7 @@
     "com.aigamestudio.arcade-controls": "file:../../../../arcade-controls/components/unity-game/Packages/com.aigamestudio.arcade-controls",
     "com.aigamestudio.game-home-alone": "file:../../../../home-alone/components/unity-game/Assets/_Project",
     "com.aigamestudio.game-life-choices": "file:../../../../life-choices/components/unity-game/Assets/_Project",
+    "com.aigamestudio.game-meditation": "file:../../../../meditation/components/unity-game/Assets/_Project",
     "com.aigamestudio.game-endless-sisyphus": "file:../../../../../external/EndlessSisyphusUnity/Assets/EndlessSisyphus",
     "com.aigamestudio.game-factory": "file:../../../../../external/factory_game/Assets/FactoryGame",
     "com.aigamestudio.game-lady-bug": "file:../../../../../external/lady_bug-v2/UnityProject/Assets/LadyBug",

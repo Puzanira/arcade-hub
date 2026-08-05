@@ -145,7 +145,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         {
             yield return LoadMenuAndTakeOver();
 
-            // Hold Bang (slot 3 = "Arcade Prototype", 'soon') until the overlay appears.
+            // Hold Bang (slot 3 = «Таблетка в космосе», 'soon') until the overlay appears.
             int guard = 0;
             while (!_htl.ComingSoonVisible && guard < 120)
             {
@@ -160,8 +160,8 @@ namespace AiGameStudio.ArcadeHub.Tests
             Text label = _htl.ComingSoonLabel;
             AssertRectOnScreen(label.rectTransform, "СКОРО overlay");
             StringAssert.Contains("СКОРО", label.text, "overlay announces coming-soon");
-            StringAssert.Contains("Arcade Prototype", label.text, "overlay names the planned slot");
-            StringAssert.DoesNotContain("Endless Sisyphus", label.text, "one-hot: no other game name leaks in");
+            StringAssert.Contains("Таблетка в космосе", label.text, "overlay names the planned slot");
+            StringAssert.DoesNotContain("Бесконечный Сизиф", label.text, "one-hot: no other game name leaks in");
             StringAssert.DoesNotContain("Home Alone", label.text, "one-hot: no other game name leaks in");
 
             Assert.Less(_htl.Charge, 0.1f, "charge resets after a planned slot fires");

@@ -35,5 +35,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Packages/com.aigamestudio.game-lady-bug/Scenes/Main.unity
     guid: 02b4195a87e544e4ab51778fd5982897
+  - enabled: 1
+    path: Packages/com.aigamestudio.game-meditation/Scenes/Game.unity
+    guid: 46ab8dec8ea9d44d4b9b0a0b020dc841
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}

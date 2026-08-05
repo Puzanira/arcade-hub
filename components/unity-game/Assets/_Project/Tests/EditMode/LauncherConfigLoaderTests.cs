@@ -62,10 +62,11 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [Test]
-        public void ShippedConfig_MatchesFoundersLayout_FiveInstalled_TwoSoon_NoTestGame()
+        public void ShippedConfig_MatchesFoundersLayout_SixInstalled_OneSoon_NoTestGame()
         {
-            // all-games-wiring (founder's layout 2026-07-26): FIVE installed games, TWO "soon" placeholders,
-            // and NO built-in Test Game slot (its scene/rig stay in the project but leave the launcher menu).
+            // all-games-wiring (founder's layout 2026-07-26, Медитация landed 2026-08-01): SIX installed
+            // games, ONE "soon" placeholder, and NO built-in Test Game slot (its scene/rig stay in the
+            // project but leave the launcher menu).
             LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
 
             int installed = 0, soon = 0;
@@ -75,31 +76,44 @@ namespace AiGameStudio.ArcadeHub.Tests
                 else soon++;
             }
             Assert.AreEqual(7, config.slots.Count, "Seven cabinet controls -> seven slots.");
-            Assert.AreEqual(5, installed, "Sisyphus, Factory, Life Choices, Lady Bug, Home Alone are installed.");
-            Assert.AreEqual(2, soon, "Arcade Prototype and Медитация are still 'soon'.");
+            Assert.AreEqual(6, installed,
+                "Sisyphus, Factory, Life Choices, Lady Bug, Home Alone, Медитация are installed.");
+            Assert.AreEqual(1, soon, "Only Arcade Prototype is still 'soon'.");
 
             Assert.IsNull(config.slots.Find(s => s.displayName == "Test Game"),
                 "Test Game must NOT appear in the shipped launcher menu.");
 
             // Each installed game sits on its founder-assigned control with a real entry scene.
-            AssertInstalledOn(config, "Crank",       "Endless Sisyphus");
-            AssertInstalledOn(config, "RedButton",   "Последняя смена (Factory)");
-            AssertInstalledOn(config, "GreenButton", "Life Choices");
-            AssertInstalledOn(config, "HeightA",     "Lady Bug");
-            AssertInstalledOn(config, "HeightB",     "Home Alone");
+            AssertInstalledOn(config, "Crank",       "Бесконечный Сизиф");
+            AssertInstalledOn(config, "RedButton",   "Завод");
+            AssertInstalledOn(config, "GreenButton", "Спасибо, не надо");
+            AssertInstalledOn(config, "HeightA",     "Lady Bug Hit The Road");
+            AssertInstalledOn(config, "HeightB",     "Кошачьи будни");
+            AssertInstalledOn(config, "Joystick",    "Медитация в спешке");
 
-            // The two "soon" slots are placeholders — planned control bindings, no entry scene.
+            // The one "soon" slot is a placeholder — a planned control binding, no entry scene.
             LauncherSlot bang = config.slots.Find(s => s.controlName == "BangButton");
-            LauncherSlot joy = config.slots.Find(s => s.controlName == "Joystick");
-            Assert.AreEqual("Arcade Prototype", bang.displayName);
-            Assert.AreEqual("Медитация", joy.displayName);
+            Assert.AreEqual("Таблетка в космосе", bang.displayName);
             Assert.IsFalse(bang.IsInstalled, "Arcade Prototype is a 'soon' placeholder.");
-            Assert.IsFalse(joy.IsInstalled, "Медитация is a 'soon' placeholder.");
 
             // Native-input games (legacy/raw input) carry the pump flag so the return watchdog stays live.
-            Assert.IsTrue(config.slots.Find(s => s.displayName == "Lady Bug").nativeInput, "Lady Bug is native-input.");
-            Assert.IsTrue(config.slots.Find(s => s.displayName == "Последняя смена (Factory)").nativeInput, "Factory is native-input.");
-            Assert.IsFalse(config.slots.Find(s => s.displayName == "Endless Sisyphus").nativeInput, "Sisyphus pumps ArcadeInput itself.");
+            Assert.IsTrue(config.slots.Find(s => s.displayName == "Lady Bug Hit The Road").nativeInput, "Lady Bug is native-input.");
+            Assert.IsTrue(config.slots.Find(s => s.displayName == "Завод").nativeInput, "Factory is native-input.");
+            // …and the ArcadeInput-native ones must NOT, or they get pumped twice: Медитация's entry scene
+            // carries its own ArcadeInputRunner, and a doubled pump would count every crank degree twice —
+            // which on this game is the whole collection mechanic.
+            Assert.IsFalse(config.slots.Find(s => s.displayName == "Медитация в спешке").nativeInput,
+                "Медитация pumps ArcadeInput itself.");
+
+            // Sisyphus needs the flag DESPITE reading through ArcadeInput, and this line used to say the
+            // opposite (it was unreachable behind the installed-count assertion above, so nothing caught
+            // it). Its ArcadeControlsAdapter takes ownership only when ArcadeInput.Backend is null; in the
+            // hub the backend is NOT null — the menu scene's runner left it behind — so Sisyphus refuses
+            // ownership and never pumps, and the watchdog's own runner has to. The shipped config already
+            // sets it; what was stale was the expectation. (Медитация avoids the trap by keying its guard
+            // on a runner IN THE SCENE rather than on the static backend.)
+            Assert.IsTrue(config.slots.Find(s => s.displayName == "Бесконечный Сизиф").nativeInput,
+                "Sisyphus yields backend ownership in the hub, so the launcher must pump for it.");
         }
 
         [Test]

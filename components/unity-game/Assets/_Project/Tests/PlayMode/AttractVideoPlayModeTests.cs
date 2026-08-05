@@ -16,11 +16,16 @@ namespace AiGameStudio.ArcadeHub.Tests
 {
     /// <summary>
     /// The attract screen (attract-video-screen increment): HubMenu is a full-screen LOOPING video with
-    /// sound and NO text/list/cursor — only the hold-to-launch stack renders above it. Covers: the video
-    /// is alive and looping; the themed sprite rain is ONE-HOT per slot (a charging slot piles ONLY its
-    /// own configured sprites — the rain IS the game hint, so cross-slot leakage would mislead the
+    /// sound and no game list or cursor — only the hold-to-launch stack renders above it. Covers: the
+    /// video is alive and looping; the themed sprite rain is ONE-HOT per slot (a charging slot piles ONLY
+    /// its own configured sprites — the rain IS the game hint, so cross-slot leakage would mislead the
     /// player); and the two contract screenshots (idle = clean video frame, charge = Sisyphus boulders
     /// over the video).
+    ///
+    /// NOTE (attract-screen v2, founder 2026-08-05): the screen is no longer text-free. The reel's top
+    /// zones are masked out and the launcher draws its own credits ticker and its own game/cabinet title
+    /// there — see <see cref="AttractOverlayPlayModeTests"/>. "Clean frame" below therefore means what it
+    /// has always ASSERTED — nothing is charging, no bar, no rain — not an absence of text.
     /// </summary>
     public class AttractVideoPlayModeTests
     {

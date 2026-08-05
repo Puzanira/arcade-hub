@@ -30,7 +30,7 @@ namespace AiGameStudio.ArcadeHub
     /// </summary>
     [AddComponentMenu("Arcade Hub/Hold To Launch Controller")]
     [DisallowMultipleComponent]
-    public sealed class HoldToLaunchController : MonoBehaviour
+    public sealed class HoldToLaunchController : MonoBehaviour, IAttractSlotSource
     {
         // Slot-colour palette (7 slots); index wraps if a config has more.
         private static readonly Color[] SlotColors =
@@ -100,6 +100,13 @@ namespace AiGameStudio.ArcadeHub
 
         public float Charge => _machine?.Charge ?? 0f;
         public int ActiveSlot => _machine?.ActiveSlot ?? -1;
+
+        /// <summary>
+        /// The config this controller was built from. Exposed so <see cref="AttractOverlay"/> can name
+        /// the active slot from the SAME loaded slot list the charge machine indexes into — reloading
+        /// the JSON separately would risk the title naming a different game than the bar is charging.
+        /// </summary>
+        public LauncherConfig Config => _config;
 
         /// <summary>Number of sprites currently piled on the grid (grows with charge, clears on decay).</summary>
         public int FlowerCount => _filledCount;

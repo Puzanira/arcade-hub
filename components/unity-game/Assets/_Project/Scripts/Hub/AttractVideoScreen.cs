@@ -6,15 +6,21 @@ using UnityEngine.Video;
 namespace AiGameStudio.ArcadeHub
 {
     /// <summary>
-    /// The launcher's attract screen (founder's decision 2026-07-29): the HubMenu shows a full-screen
-    /// LOOPING video with sound — the cabinet's attract reel inviting players to poke the controls — and
-    /// NOTHING else. No game list, no cursor, no text; the hold-to-launch stack (charge bar + themed
-    /// sprite rain, plus the single approved "СКОРО" overlay) renders ON TOP of the video from its own
-    /// higher-sorted canvas.
+    /// The launcher's attract screen: the HubMenu shows a full-screen LOOPING video with sound — the
+    /// cabinet's attract reel inviting players to poke the controls. The hold-to-launch stack (charge
+    /// bar + themed sprite rain, plus the single approved "СКОРО" overlay) renders ON TOP of the video
+    /// from its own higher-sorted canvas.
+    ///
+    /// attract-screen v2 (founder, 2026-08-05) swapped the reel for a new clip and made only its
+    /// BOTTOM zone — the pixel hands and controls — visible: this component paints an opaque panel in
+    /// the clip's own background tone over everything above <see cref="AttractZones.MaskBottom"/>,
+    /// burying the clip's baked credits line and its baked «НАЖМИ ЧТО-НИБУДЬ» title. The launcher then
+    /// redraws both, brighter and live, from <see cref="AttractOverlay"/>. The zone boundaries were
+    /// measured off the clip frame by frame — see <see cref="AttractZones"/>.
     ///
     /// The clip lives in StreamingAssets (like launcher-config.json — swappable on the cabinet without a
     /// rebuild). It is decoded into a RenderTexture shown by a RawImage on a bottom-sorted canvas,
-    /// letterboxed to the video's own aspect (FitInside math; the shipped 1280×720 clip fills the 16:9
+    /// letterboxed to the video's own aspect (FitInside math; the shipped 1920×1080 clip fills the 16:9
     /// reference exactly). Audio plays through the default output (direct mode) — the attract sound.
     /// </summary>
     [AddComponentMenu("Arcade Hub/Attract Video Screen")]
@@ -22,14 +28,16 @@ namespace AiGameStudio.ArcadeHub
     public sealed class AttractVideoScreen : MonoBehaviour
     {
         /// <summary>The attract clip's file name inside StreamingAssets.</summary>
-        public const string FileName = "Explainer.mp4";
+        public const string FileName = "Attract.mp4";
 
         private const float RefWidth = 1920f;
         private const float RefHeight = 1080f;
 
         private VideoPlayer _player;
         private RawImage _screen;
+        private RectTransform _zoneMask;
         private RenderTexture _target;
+        private bool _built;
         private float _pausedSince = -1f;
         private float _stepAccum;
         private float _retryAccum;
@@ -39,6 +47,12 @@ namespace AiGameStudio.ArcadeHub
 
         /// <summary>The full-screen RawImage the video is drawn into (test seam: on-screen rect).</summary>
         public RawImage Screen => _screen;
+
+        /// <summary>
+        /// The opaque panel hiding the clip's baked credits + title (test seam: it must cover them and
+        /// stop short of the hands).
+        /// </summary>
+        public RectTransform ZoneMask => _zoneMask;
 
         /// <summary>True once the clip is prepared and actively playing.</summary>
         public bool IsPlaying => _player != null && _player.isPlaying;
@@ -64,8 +78,20 @@ namespace AiGameStudio.ArcadeHub
 
         private void Start()
         {
-            BuildView();
+            EnsureBuilt();
             BuildPlayer();
+        }
+
+        /// <summary>
+        /// Build the video canvas + screen + zone mask, once. Idempotent and safe to call before
+        /// <see cref="Start"/>: <see cref="AttractOverlay"/> parents its widgets onto
+        /// <see cref="Screen"/> and cannot rely on Unity's Start ordering.
+        /// </summary>
+        public void EnsureBuilt()
+        {
+            if (_built) return;
+            _built = true;
+            BuildView();
         }
 
         private void Update()
@@ -161,6 +187,29 @@ namespace AiGameStudio.ArcadeHub
             rt.sizeDelta = new Vector2(RefWidth, RefHeight); // resized to the true aspect on prepare
             _screen = imgGO.GetComponent<RawImage>();
             _screen.color = Color.black; // black until the first decoded frame arrives
+
+            BuildZoneMask();
+        }
+
+        // The founder's "only the red zone stays visible" rule (2026-08-05). One opaque panel in the
+        // clip's own flat background tone (#262626) covering clip rows 0…MaskBottom — i.e. the baked
+        // credits AND the baked title — parented to the video rect with NORMALISED anchors, so it keeps
+        // registering with the video however the FitInside pass letterboxes it. It is a child of the
+        // RawImage, hence drawn after it; AttractOverlay's own text is added later still and lands on
+        // top of the panel.
+        private void BuildZoneMask()
+        {
+            var go = new GameObject("ZoneMask", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(_screen.transform, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, AttractZones.BottomFraction(AttractZones.MaskBottom));
+            rt.anchorMax = new Vector2(1f, 1f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = go.GetComponent<Image>();
+            img.color = AttractZones.BackgroundColor;
+            img.raycastTarget = false;
+            _zoneMask = rt;
         }
 
         private void BuildPlayer()
