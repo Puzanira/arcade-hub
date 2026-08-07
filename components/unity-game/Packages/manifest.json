@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.aigamestudio.arcade-controls": "https://github.com/Puzanira/arcade-controls.git?path=/components/unity-game/Packages/com.aigamestudio.arcade-controls#v0.4.1",
+    "com.aigamestudio.arcade-controls": "https://github.com/Puzanira/arcade-controls.git?path=/components/unity-game/Packages/com.aigamestudio.arcade-controls#v0.5.0",
     "com.aigamestudio.game-home-alone": "https://github.com/Puzanira/home-alone.git?path=/components/unity-game/Assets/_Project#1e32b8e2169f281219f088977cb76d517e6a4335",
     "com.aigamestudio.game-life-choices": "https://github.com/Puzanira/life-choices.git?path=/components/unity-game/Assets/_Project#ef49e64e114476c6c31840d13be1bfbdeaecbc4f",
     "com.aigamestudio.game-meditation": "https://github.com/Puzanira/meditation.git?path=/components/unity-game/Assets/_Project#f892b0014fbeaf2d577df199eeb4456a9c7fe66d",
