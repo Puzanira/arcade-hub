@@ -154,6 +154,38 @@ namespace AiGameStudio.ArcadeHub
         /// </summary>
         public const float ReelFadeMaxAlpha = 1f;
 
+        // ---- the title's change, cut from the reel's own cloth ----
+
+        /// <summary>
+        /// How much of the reel's fade the TITLE's change is given (founder, 2026-08-08: «анимация смены
+        /// заголовка должна быть с теми же таймингами, что и фейд — согласованы, читаться как будто это
+        /// реакция на нашу игру»).
+        ///
+        /// The title and the reel start on the SAME frame, off the same signal; the title simply runs a
+        /// little shorter, so it has finished saying the new name while the picture is still on its way.
+        /// That order is what makes the pair read as cause and effect — the name answers the hand on the
+        /// control, and the reel then gets out of its way — rather than as two animations that happen to
+        /// overlap. At 1 the two would land together and the title's swap would sit at the exact middle of
+        /// the picture's dip, which reads as one long blank; below ~0.5 the title is done so early it
+        /// stops looking connected to the picture at all.
+        ///
+        /// Derived, never duplicated: retuning <see cref="ReelFadeOutSeconds"/> or
+        /// <see cref="ReelFadeInSeconds"/> moves the title with them.
+        /// </summary>
+        public const float TitleChangeFraction = 0.75f;
+
+        /// <summary>
+        /// Seconds the title takes to become the worked control's game — the whole out-swap-in — inside
+        /// the window the reel spends leaving. 0.9 s of the reel's 1.2 s.
+        /// </summary>
+        public static float TitleFadeOutSeconds => ReelFadeOutSeconds * TitleChangeFraction;
+
+        /// <summary>
+        /// Seconds the title takes to walk back to the cabinet's name, inside the window the reel spends
+        /// coming back. 0.6 s of the reel's 0.8 s.
+        /// </summary>
+        public static float TitleFadeInSeconds => ReelFadeInSeconds * TitleChangeFraction;
+
         /// <summary>Normalised anchor Y (0 = bottom, 1 = top) for a top-down clip row.</summary>
         public static float TopFraction(float clipRow) => 1f - clipRow / ClipHeight;
 

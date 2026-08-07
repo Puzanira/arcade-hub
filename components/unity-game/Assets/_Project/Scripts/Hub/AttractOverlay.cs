@@ -48,15 +48,27 @@ namespace AiGameStudio.ArcadeHub
     ///   is playing, and the NAME OF THE GAME a control launches the moment that control is worked.
     ///   The signal is the very one hold-to-launch charges against
     ///   (<see cref="IAttractSlotSource.ActiveSlot"/>), so the title can never disagree with the bar
-    ///   and the themed rain. Changes are a soft alpha fade (out, swap, in) rather than a hard cut;
-    ///   once the control is released and the charge has decayed, the title waits
-    ///   <see cref="returnDelay"/> and fades back to the cabinet name.
+    ///   and the themed rain. Changes are a soft alpha fade (out, swap, in) rather than a hard cut.
     ///
-    /// This component is also the attract screen's single CLOCK: its <see cref="Tick"/> drives the reel's
-    /// own fade-out-and-freeze while a control is being charged (<see cref="AttractVideoScreen.TickEngagement"/>)
-    /// off the very same <see cref="IAttractSlotSource.ActiveSlot"/> reading the title uses — so the reel
-    /// leaving, the title becoming a game's name and the charge bar filling are one movement, and the reel
-    /// returns on exactly the signal that sends the title back to the cabinet name.
+    /// This component is also the attract screen's single CLOCK, and — since the founder's title-sync note
+    /// (2026-08-08: «анимация смены заголовка должна быть с теми же таймингами, что и фейд… сейчас
+    /// название сменяется позже, чем снова вцветает стартовый экран») — the owner of ONE timeline for
+    /// both. Every <see cref="Tick"/> reads the engagement signal ONCE
+    /// (<see cref="IAttractSlotSource.ActiveSlot"/> ≥ 0, OR-ed with <see cref="IReelSuspender"/>) and hands
+    /// the same boolean to the title and to the reel (<see cref="AttractVideoScreen.TickEngagement"/>). So
+    /// both start on the same frame, from the same event, in both directions:
+    ///
+    /// <code>
+    ///   grabbed:   reel fades OUT over 1.2 s ─ title becomes the game's name inside that window (0.9 s)
+    ///   released:  reel fades IN  over 0.8 s ─ title returns to the cabinet name inside it   (0.6 s)
+    /// </code>
+    ///
+    /// The title's durations are DERIVED from the reel's (<see cref="AttractZones.TitleFadeOutSeconds"/> /
+    /// <see cref="AttractZones.TitleFadeInSeconds"/>), never copied, so retuning the reel's fade moves the
+    /// title with it. The title keeps its own clock rather than reading
+    /// <see cref="AttractVideoScreen.FadeAmount"/> directly for one reason: while one game's control is let
+    /// go and another is grabbed straight away, the reel does not move at all (it is already out), and the
+    /// title still has to cross-fade from one game's name to the other's instead of hard-cutting.
     ///
     /// The widgets are parented onto the video's own rect with NORMALISED anchors, so they track the
     /// letterboxed video exactly (see <see cref="AttractZones"/> for the measured geometry). The canvas
@@ -98,11 +110,9 @@ namespace AiGameStudio.ArcadeHub
         [Tooltip("Largest title size; long game names shrink to fit via best-fit.")]
         [SerializeField] private int titleFontSizeMax = 132;
         [SerializeField] private int titleFontSizeMin = 44;
-        [Tooltip("Full duration of a title change: fade out, swap the words, fade back in.")]
-        [SerializeField] private float fadeSeconds = 0.45f;
-        [Tooltip("How long the title keeps a game's name after its control has gone quiet (the charge " +
-                 "itself still has to decay first, which adds ~1 s on top).")]
-        [SerializeField] private float returnDelay = 2f;
+        // NB: no duration fields here. A title change lasts exactly what the reel's own fade lasts,
+        // scaled by AttractZones.TitleChangeFraction — a serialized copy is precisely how the two
+        // timelines drifted apart in the first place.
 
         /// <summary>When false, <see cref="Update"/> does not advance — tests drive <see cref="Tick"/> with a fixed dt.</summary>
         public bool AutoTick = true;
@@ -122,9 +132,7 @@ namespace AiGameStudio.ArcadeHub
         private Text _title;
         private string _shown = CabinetName;
         private string _desired = CabinetName;
-        private float _idleTimer;
-        private float _fadeT;
-        private bool _fading;
+        private float _titleAlpha = 1f;
 
         // -------- read surface (tests / tooling) --------
 
@@ -140,8 +148,8 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>Title alpha, 0..1 — dips through 0 during a change.</summary>
         public float TitleAlpha => _title != null ? _title.color.a : 0f;
 
-        /// <summary>True while a title change is being faded.</summary>
-        public bool IsFading => _fading;
+        /// <summary>True while a title change is being faded — dipping out, or ramping back in.</summary>
+        public bool IsFading => _shown != _desired || _titleAlpha < 1f;
 
         /// <summary>The clipping viewport of the credits ticker (test seam: it sits in the top band).</summary>
         public RectTransform CreditsViewport => _creditsViewport;
@@ -217,29 +225,37 @@ namespace AiGameStudio.ArcadeHub
 
         // -------- core loop --------
 
-        /// <summary>Advance one frame: scroll the ticker and drive the title's fade state machine.</summary>
+        /// <summary>
+        /// Advance one frame: scroll the ticker, and drive the title and the reel off ONE reading of the
+        /// engagement signal — see the class summary. The two are handed the same boolean in the same
+        /// frame, which is what keeps the picture and the words on a single timeline.
+        /// </summary>
         public void Tick(float dt)
         {
             if (dt < 0f) dt = 0f;
+
+            // Two reasons to put the reel away, ONE mechanism: a control being charged, or a full-screen
+            // screen over the launcher (the about document). Read ONCE, here, so the title cannot be
+            // answering a slightly different question than the picture is.
+            bool charging = _source != null && _source.ActiveSlot >= 0;
+            bool suspended = _suspender != null && _suspender.SuspendsReel;
+            bool engaged = charging || suspended;
+
             TickCredits(dt);
-            TickTitle(dt);
-            TickReel(dt);
+            TickTitle(engaged, dt);
+            TickReel(engaged, dt);
         }
 
         // The reel fades out and freezes while a control is being charged, and comes back when it is
-        // released. Driven from HERE, off the very same ActiveSlot reading the title uses one line above,
-        // so the picture leaving, the title becoming the game's name and the bar filling are one gesture —
-        // and the reel returns on exactly the signal («ActiveSlot == -1») that starts the title's walk back
-        // to the cabinet name.
-        private void TickReel(float dt)
+        // released. Driven from HERE, off the very signal the title runs on one line above, so the picture
+        // leaving, the title becoming the game's name and the bar filling are one gesture — and the reel
+        // returns on exactly the event that sends the title back to the cabinet name.
+        private void TickReel(bool engaged, float dt)
         {
             if (_video == null) return;
-            // Two reasons to put the reel away, ONE mechanism: a control being charged, or a full-screen
-            // screen over the launcher (the about document). Both fade it out over the same 1.2 s and
-            // freeze it at the bottom of that fade; both bring it back, with sound, the same way.
-            bool charging = _source != null && _source.ActiveSlot >= 0;
-            bool suspended = _suspender != null && _suspender.SuspendsReel;
-            _video.TickEngagement(charging || suspended, dt);
+            // Both cases fade it out over the same 1.2 s and freeze it at the bottom of that fade; both
+            // bring it back, with sound, the same way.
+            _video.TickEngagement(engaged, dt);
         }
 
         private void TickCredits(float dt)
@@ -272,65 +288,61 @@ namespace AiGameStudio.ArcadeHub
             }
         }
 
-        private void TickTitle(float dt)
+        // The title's half of the shared timeline. <paramref name="engaged"/> is the same boolean the reel
+        // is about to be handed, so a change starts on the frame the picture starts moving and — running
+        // at TitleChangeFraction of the reel's window — has landed before the picture finishes.
+        private void TickTitle(bool engaged, float dt)
         {
             if (_title == null) return;
 
-            // What SHOULD be on screen: the worked control's game, or — once the control has gone quiet
-            // long enough — the cabinet's own name.
-            int slot = _source != null ? _source.ActiveSlot : -1;
-            string slotName = DisplayNameFor(slot);
-            if (slotName != null)
+            if (_chromeHidden)
             {
-                _idleTimer = 0f;
-                _desired = slotName;
+                // Nothing of ours is on screen (the about document has the whole surface). Come back from
+                // behind it already on the cabinet's name instead of fading to it in front of the player:
+                // an animation nobody could see is not an animation worth finishing.
+                _desired = CabinetName;
+                ShowTitle(CabinetName);
+                SetTitleAlpha(1f);
+                return;
+            }
+
+            // What SHOULD be on screen: the worked control's game, or — the instant nothing is being
+            // worked — the cabinet's own name. No extra delay of its own: the title leaves and returns on
+            // the reel's events, or it drifts out of step with the picture (founder, 2026-08-08).
+            _desired = DisplayNameFor(_source != null ? _source.ActiveSlot : -1) ?? CabinetName;
+
+            // Whichever window the reel is in, the title's whole out-swap-in fits inside it. Half of it
+            // dips out and half ramps back in, hence the doubled rate.
+            float window = engaged ? AttractZones.TitleFadeOutSeconds : AttractZones.TitleFadeInSeconds;
+            float step = dt * 2f / Mathf.Max(0.01f, window);
+
+            if (_desired != _shown)
+            {
+                // Dip through zero and swap at the bottom. A true two-layer cross-fade would overlap two
+                // different strings in the same centred rect and read as mush for the whole transition;
+                // dipping through zero keeps it legible and is just as soft at this duration.
+                _titleAlpha -= step;
+                if (_titleAlpha <= 0f)
+                {
+                    ShowTitle(_desired);
+                    // Whatever the dip overshot below zero belongs to the arrival — so a change lasts the
+                    // window it was given, not the window plus a frame.
+                    _titleAlpha = Mathf.Min(1f, -_titleAlpha);
+                }
             }
             else
             {
-                _idleTimer += dt;
-                if (_idleTimer >= returnDelay)
-                    _desired = CabinetName;
+                _titleAlpha = Mathf.Min(1f, _titleAlpha + step);
             }
 
-            if (!_fading && _desired != _shown)
-            {
-                _fading = true;
-                _fadeT = 0f;
-            }
+            SetTitleAlpha(_titleAlpha);
+        }
 
-            if (!_fading)
-            {
-                SetTitleAlpha(1f);
-                return;
-            }
-
-            float duration = Mathf.Max(0.01f, fadeSeconds);
-            _fadeT += dt / duration;
-
-            // Fade OUT over the first half, swap the words at the bottom of the dip, fade back IN over
-            // the second half. A true two-layer cross-fade would overlap two different strings in the
-            // same centred rect and read as mush for the whole transition; dipping through zero keeps
-            // it legible and is just as soft at this duration.
-            if (_fadeT < 0.5f)
-            {
-                SetTitleAlpha(1f - _fadeT / 0.5f);
-                return;
-            }
-
-            if (_shown != _desired)
-            {
-                _shown = _desired;
-                _title.text = _shown;
-            }
-
-            if (_fadeT >= 1f)
-            {
-                _fading = false;
-                SetTitleAlpha(1f);
-                return;
-            }
-
-            SetTitleAlpha((_fadeT - 0.5f) / 0.5f);
+        private void ShowTitle(string words)
+        {
+            if (_shown == words) return;
+            _shown = words;
+            _title.text = _shown;
         }
 
         // The slot's game name, or null when nothing is being worked / the config cannot resolve it.
@@ -345,8 +357,9 @@ namespace AiGameStudio.ArcadeHub
 
         private void SetTitleAlpha(float a)
         {
+            _titleAlpha = Mathf.Clamp01(a);
             Color c = _title.color;
-            c.a = Mathf.Clamp01(a);
+            c.a = _titleAlpha;
             _title.color = c;
         }
 

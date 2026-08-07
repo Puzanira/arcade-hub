@@ -287,18 +287,90 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.AreEqual(1f, _overlay.TitleAlpha, 1e-3f, "The new title settles fully opaque.");
         }
 
+        // ---------------- title ↔ reel: ONE timeline (founder, 2026-08-08) ----------------
+
+        // The founder's complaint was a timing one: «анимация смены заголовка должна быть с теми же
+        // таймингами, что и фейд — согласованы… сейчас рассинхрон: название сменяется позже, чем снова
+        // вцветает стартовый экран». The three tests below are what "согласованы" means in numbers:
+        // both animations START on the same frame off the same event, and the title's LANDS inside the
+        // window the reel is using — a little early, never late.
+
+        private const float FineStep = 1f / 120f; // fine enough that the settle times mean something
+
+        // Run the overlay until both the title has settled and the reel has reached <paramref name="reelTarget"/>,
+        // reporting how many seconds each of them took from the first tick.
+        private void RunOverlayUntilSettled(string expectedTitle, float reelTarget,
+            out float titleSeconds, out float reelSeconds)
+        {
+            AttractVideoScreen video = _host.Video;
+            titleSeconds = -1f;
+            reelSeconds = -1f;
+            float t = 0f;
+
+            for (int i = 0; i < 2000 && (titleSeconds < 0f || reelSeconds < 0f); i++)
+            {
+                _overlay.Tick(FineStep);
+                t += FineStep;
+                if (titleSeconds < 0f && _overlay.ShownTitle == expectedTitle && !_overlay.IsFading)
+                    titleSeconds = t;
+                if (reelSeconds < 0f && Mathf.Abs(video.FadeAmount - reelTarget) <= 1e-3f)
+                    reelSeconds = t;
+            }
+        }
+
         [UnityTest]
-        public IEnumerator Title_FadesBackToTheCabinet_AfterTheControlGoesQuiet()
+        public IEnumerator Title_BecomesTheGame_InsideTheReelsOwnFadeOut()
         {
             yield return LoadAttractScreen();
+            AttractVideoScreen video = _host.Video;
+            string game = _htl.Config.slots[SisyphusSlot].displayName;
+
+            EngageCrank(); // the control is taken; the overlay has not seen it yet
+            Assert.AreEqual(0f, video.FadeAmount, 1e-3f, "Precondition: the reel is whole.");
+            Assert.AreEqual(AttractOverlay.CabinetName, _overlay.ShownTitle);
+
+            // ONE event, ONE frame: the very first tick after the control is taken has to move BOTH.
+            _overlay.Tick(FineStep);
+            Assert.Greater(video.FadeAmount, 0f, "The reel starts leaving on the frame the control is taken…");
+            Assert.Less(_overlay.TitleAlpha, 1f, "…and the title starts changing on that very same frame.");
+
+            RunOverlayUntilSettled(game, 1f, out float titleSeconds, out float reelSeconds);
+            Debug.Log($"[title-sync] out: title landed at {titleSeconds:F2} s, reel gone at {reelSeconds:F2} s " +
+                      $"(reel window {AttractZones.ReelFadeOutSeconds:F2} s)");
+
+            Assert.Greater(titleSeconds, 0f, "The title must land on the game's name.");
+            Assert.AreEqual(AttractZones.ReelFadeOutSeconds, reelSeconds, FineStep * 2f + 1e-3f,
+                "Sanity: the reel still leaves over its own tuned duration.");
+
+            Assert.LessOrEqual(titleSeconds, reelSeconds,
+                "The title's change must fit INSIDE the window the reel spends leaving — a title that " +
+                "settles after the picture has gone is exactly the desync the founder saw.");
+            Assert.Greater(titleSeconds, AttractZones.ReelFadeOutSeconds * 0.5f,
+                "…and it must use most of that window: a title that is done in a blink stops reading as " +
+                "part of the same movement.");
+            Assert.AreEqual(1f, _overlay.TitleAlpha, 1e-3f, "The game's name settles fully opaque.");
+
+            // Halfway through the shared window: the picture is visibly going and the title is visibly
+            // changing — this is the frame the two animations have to agree on.
+            Assert.AreEqual(AttractZones.TitleFadeOutSeconds, titleSeconds, FineStep * 2f + 1e-3f,
+                "The title's window is the reel's, scaled — not a number of its own.");
+        }
+
+        [UnityTest]
+        public IEnumerator Title_ReturnsToTheCabinet_InsideTheReelsOwnFadeIn()
+        {
+            yield return LoadAttractScreen();
+            AttractVideoScreen video = _host.Video;
             string game = _htl.Config.slots[SisyphusSlot].displayName;
 
             EngageCrank();
-            for (int i = 0; i < 40 && (_overlay.IsFading || _overlay.ShownTitle != game); i++)
-                _overlay.Tick(0.05f);
-            Assert.AreEqual(game, _overlay.ShownTitle, "Precondition: the game's name is up.");
+            for (int i = 0; i < 200 && (_overlay.IsFading || video.FadeAmount < 1f); i++)
+                _overlay.Tick(0.02f);
+            Assert.AreEqual(game, _overlay.ShownTitle, "Precondition: the game's name is up…");
+            Assert.AreEqual(1f, video.FadeAmount, 1e-3f, "…and the reel has fully left.");
 
-            // Let go: the charge decays and the machine drops the slot.
+            // Let go. The charge decays and the machine drops the slot — ONE event for both animations.
+            // (The overlay is deliberately not ticked here, so the return starts from that event alone.)
             for (int i = 0; i < 30 && _htl.ActiveSlot >= 0; i++)
             {
                 _fake.Next = Neutral;
@@ -307,18 +379,68 @@ namespace AiGameStudio.ArcadeHub.Tests
             }
             Assert.AreEqual(-1, _htl.ActiveSlot, "Precondition: nothing is being worked any more.");
 
-            // The title lingers on the game for a beat — a player who briefly lets go of the crank must
-            // not get the name yanked away mid-glance.
-            _overlay.Tick(0.1f);
-            Assert.AreEqual(game, _overlay.ShownTitle, "The game's name survives a momentary release.");
+            _overlay.Tick(FineStep);
+            Assert.Less(video.FadeAmount, 1f, "The reel starts coming back on the release…");
+            Assert.Less(_overlay.TitleAlpha, 1f,
+                "…and the title starts leaving the game's name on that very same frame — no separate " +
+                "return delay of its own (the ~2 s wait the founder saw as «сменяется позже»).");
 
-            for (int i = 0; i < 100 && _overlay.ShownTitle != AttractOverlay.CabinetName; i++)
-                _overlay.Tick(0.1f);
+            RunOverlayUntilSettled(AttractOverlay.CabinetName, 0f,
+                out float titleSeconds, out float reelSeconds);
+            Debug.Log($"[title-sync] in: title landed at {titleSeconds:F2} s, reel back at {reelSeconds:F2} s " +
+                      $"(reel window {AttractZones.ReelFadeInSeconds:F2} s)");
 
-            Assert.AreEqual(AttractOverlay.CabinetName, _overlay.ShownTitle,
-                "Once the control has been quiet for the return delay, the cabinet's name comes back.");
-            for (int i = 0; i < 20 && _overlay.IsFading; i++) _overlay.Tick(0.05f);
+            Assert.Greater(titleSeconds, 0f, "The cabinet's name must come back.");
+            Assert.AreEqual(AttractZones.ReelFadeInSeconds, reelSeconds, FineStep * 2f + 1e-3f,
+                "Sanity: the reel still returns over its own tuned duration.");
+            Assert.LessOrEqual(titleSeconds, reelSeconds,
+                "«название сменяется позже, чем снова вцветает стартовый экран» — the exact failure. The " +
+                "cabinet's name must be back BY the time the picture is.");
+            Assert.Greater(titleSeconds, AttractZones.ReelFadeInSeconds * 0.5f,
+                "…without snapping back the instant the control is released.");
+            Assert.AreEqual(AttractZones.TitleFadeInSeconds, titleSeconds, FineStep * 2f + 1e-3f,
+                "The return window is the reel's return, scaled — not a number of its own.");
             Assert.AreEqual(1f, _overlay.TitleAlpha, 1e-3f, "…fully opaque again.");
+        }
+
+        [UnityTest]
+        public IEnumerator Title_CrossesStraightBetweenGames_WithoutBlinkingThroughTheCabinetName()
+        {
+            yield return LoadAttractScreen();
+            string crankGame = _htl.Config.slots[SisyphusSlot].displayName;
+
+            EngageCrank();
+            for (int i = 0; i < 200 && (_overlay.IsFading || _overlay.ShownTitle != crankGame); i++)
+                _overlay.Tick(0.02f);
+            Assert.AreEqual(crankGame, _overlay.ShownTitle, "Precondition: the crank's game is named.");
+
+            // Let the crank go and take the GREEN button in the same movement — the quick hand-over. The
+            // charge machine holds the crank's slot until its charge has decayed, then the green button
+            // takes over; between the two there is a single frame with no active slot, and the title must
+            // not flash the cabinet's name through it.
+            int greenSlot = -1;
+            bool crossed = false;
+            for (int i = 0; i < 1500 && !crossed; i++)
+            {
+                _fake.Next = new BackendSnapshot { GreenHeld = true };
+                ArcadeInput.Update(FineStep);
+                _htl.Tick(FineStep);
+                _overlay.Tick(FineStep);
+
+                Assert.AreNotEqual(AttractOverlay.CabinetName, _overlay.ShownTitle,
+                    "A control let go and another taken straight away must read as ONE title moving from " +
+                    "game to game — never a blink through «6 режимов суеты».");
+
+                if (_htl.ActiveSlot >= 0 && _htl.ActiveSlot != SisyphusSlot) greenSlot = _htl.ActiveSlot;
+                crossed = greenSlot >= 0
+                          && _overlay.ShownTitle == _htl.Config.slots[greenSlot].displayName
+                          && !_overlay.IsFading;
+            }
+
+            Assert.GreaterOrEqual(greenSlot, 0, "The green button must have taken the slot over.");
+            Assert.IsTrue(crossed, "The title must arrive on the newly worked control's game.");
+            Assert.AreEqual(_htl.Config.slots[greenSlot].displayName, _overlay.ShownTitle);
+            Assert.AreEqual(1f, _overlay.TitleAlpha, 1e-3f, "…and settle fully opaque on it.");
         }
 
         // ---------------- the ticker's face ----------------
@@ -826,6 +948,78 @@ namespace AiGameStudio.ArcadeHub.Tests
             yield return Capture("attract-v3-c-restored.png",
                 (int)AttractZones.CreditsBandTop, (int)AttractZones.CreditsBandBottom,
                 "the credits ticker with the reel restored");
+        }
+
+        /// <summary>
+        /// The title-sync review shots (founder, 2026-08-08). Two of them are the whole point: the frame
+        /// where the reel is HALF WAY BACK and the cabinet's name is still arriving — the pair the founder
+        /// saw out of step — and the settled screen after it. A third catches the same moment on the way
+        /// out, where the game's name is arriving while the picture leaves.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Capture_TitleSync_MidTransition_AndSettled()
+        {
+            yield return LoadAttractScreen();
+
+            AttractVideoScreen video = _host.Video;
+            yield return WaitRealtime(() => video.IsShowingFrames && video.Player.frame > 0, 20f);
+            if (Application.isBatchMode && (!video.IsShowingFrames || video.Player.frame <= 0))
+                Assert.Ignore("VideoPlayer produced no frames in -batchmode; the visual gate runs in the live editor.");
+
+            video.Player.frame = 20; // a frame whose hands are all drawn
+            yield return WaitRealtime(() => System.Math.Abs(video.Player.frame - 20) < 30, 10f);
+
+            _overlay.AutoTick = true;
+            yield return null;
+            yield return null;
+            _overlay.AutoTick = false;
+            _overlay.Tick(1.5f); // let the ticker drift off its start position
+
+            string game = _htl.Config.slots[SisyphusSlot].displayName;
+
+            // (a) the crank is taken and the shared window is HALF spent: the picture is half gone and the
+            // game's name is arriving over it.
+            EngageCrank();
+            for (float t = 0f; t < AttractZones.ReelFadeOutSeconds * 0.5f; t += FineStep)
+                _overlay.Tick(FineStep);
+            Assert.AreEqual(0.5f, video.FadeAmount, 0.05f, "(a) the reel is half way out.");
+            Assert.AreEqual(game, _overlay.ShownTitle, "(a) the new name is already the one on screen…");
+            Assert.IsTrue(_overlay.IsFading, "(a) …and still arriving — the two are mid-movement together.");
+            Debug.Log($"[title-sync] shot (a): reel fade={video.FadeAmount:F2}, title alpha={_overlay.TitleAlpha:F2}, " +
+                      $"showing '{_overlay.ShownTitle}'");
+            yield return Capture("title-sync-a-leaving-halfway.png");
+
+            // Settle the engagement, then let go.
+            for (int i = 0; i < 200 && (_overlay.IsFading || video.FadeAmount < 1f); i++) _overlay.Tick(0.02f);
+            for (int i = 0; i < 30 && _htl.ActiveSlot >= 0; i++)
+            {
+                _fake.Next = Neutral;
+                ArcadeInput.Update(0.1f);
+                _htl.Tick(0.1f);
+            }
+            Assert.AreEqual(-1, _htl.ActiveSlot, "Precondition: the control is released.");
+
+            // (b) THE shot: the reel half way BACK, the cabinet's name already in its transition.
+            for (float t = 0f; t < AttractZones.ReelFadeInSeconds * 0.5f; t += FineStep)
+                _overlay.Tick(FineStep);
+            Assert.AreEqual(0.5f, video.FadeAmount, 0.05f, "(b) the reel is half way back in.");
+            Assert.AreEqual(AttractOverlay.CabinetName, _overlay.ShownTitle,
+                "(b) the cabinet's name is already the one on screen at the half-way point…");
+            Assert.IsTrue(_overlay.IsFading, "(b) …and still arriving — no waiting for the picture to finish.");
+            Debug.Log($"[title-sync] shot (b): reel fade={video.FadeAmount:F2}, title alpha={_overlay.TitleAlpha:F2}, " +
+                      $"showing '{_overlay.ShownTitle}'");
+            yield return Capture("title-sync-b-returning-halfway.png");
+
+            // (c) the finish: the reel whole again, the cabinet's name settled — and the title got there
+            // FIRST, inside the picture's own window.
+            for (int i = 0; i < 200 && video.FadeAmount > 0f; i++) _overlay.Tick(0.02f);
+            Assert.AreEqual(0f, video.FadeAmount, 1e-3f, "(c) the reel came all the way back.");
+            Assert.AreEqual(AttractOverlay.CabinetName, _overlay.ShownTitle);
+            Assert.AreEqual(1f, _overlay.TitleAlpha, 1e-3f, "(c) …with the title fully opaque.");
+            yield return WaitRealtime(() => video.IsShowingFrames, 15f);
+            yield return Capture("title-sync-c-settled.png",
+                (int)AttractZones.TitleBandTop, (int)AttractZones.TitleBandBottom,
+                "the cabinet's name, settled with the reel");
         }
 
         [UnityTest]
