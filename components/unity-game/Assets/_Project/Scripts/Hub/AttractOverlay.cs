@@ -24,7 +24,9 @@ namespace AiGameStudio.ArcadeHub
     /// The reel's fade-out-and-freeze is NOT re-implemented for it: this flag is OR-ed into the very
     /// signal a charging control raises (<see cref="AttractOverlay.TickReel"/>), so both cases run
     /// through the one <see cref="AttractVideoScreen.TickEngagement"/> path — one fade, one pause, one
-    /// return with sound.
+    /// return with sound. What it DOES change is the tempo: this one was summoned by a button press, so
+    /// the veil runs at <see cref="AttractZones.DocumentReelFadeSeconds"/> rather than at the launch
+    /// ceremony's pace (see <see cref="ReelYield"/>).
     /// </summary>
     public interface IReelSuspender
     {
@@ -120,6 +122,7 @@ namespace AiGameStudio.ArcadeHub
         private IAttractSlotSource _source;
         private IReelSuspender _suspender;
         private AttractVideoScreen _video;
+        private ReelYield _yield = ReelYield.Charge; // why the reel last gave up the screen — sets its pace
         private bool _chromeHidden;
         private Font _font;
         private Font _creditsFont;
@@ -209,6 +212,12 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>True while the title + ticker are hidden behind a full-screen screen (test seam).</summary>
         public bool ChromeHidden => _chromeHidden;
 
+        /// <summary>
+        /// Why the reel last gave up the screen, and therefore at which of the two tempos it is fading
+        /// (test seam). Latched while the screen is taken, so the return matches the departure.
+        /// </summary>
+        public ReelYield ReelYieldReason => _yield;
+
         private void Start()
         {
             if (_title != null) return;
@@ -241,6 +250,13 @@ namespace AiGameStudio.ArcadeHub
             bool suspended = _suspender != null && _suspender.SuspendsReel;
             bool engaged = charging || suspended;
 
+            // …but at two TEMPOS. The document was summoned by a button and has to answer at once; a
+            // charging control is the slow launch ceremony. The reason is LATCHED while the screen is
+            // taken, so the way back runs at the pace of whatever took it — a return that changed speed
+            // half way through would be the very seam these two numbers exist to avoid. (A document
+            // always wins the tie: it suspends the launcher, so a charge cannot survive under it.)
+            if (engaged) _yield = suspended ? ReelYield.Document : ReelYield.Charge;
+
             TickCredits(dt);
             TickTitle(engaged, dt);
             TickReel(engaged, dt);
@@ -253,9 +269,9 @@ namespace AiGameStudio.ArcadeHub
         private void TickReel(bool engaged, float dt)
         {
             if (_video == null) return;
-            // Both cases fade it out over the same 1.2 s and freeze it at the bottom of that fade; both
-            // bring it back, with sound, the same way.
-            _video.TickEngagement(engaged, dt);
+            // Both cases run the same veil, the same freeze at the bottom of it and the same return with
+            // sound — only the duration differs, and that is picked by the latched reason.
+            _video.TickEngagement(engaged, _yield, dt);
         }
 
         private void TickCredits(float dt)

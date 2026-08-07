@@ -47,6 +47,53 @@ namespace AiGameStudio.ArcadeHub.Tests
                 "The title's change can never outlast the window it rides.");
         }
 
+        // ---- the second tempo: a button press, not a charging control (founder, 2026-08-08) ----
+
+        [Test]
+        public void TheDocumentsTempo_IsDecisivelyQuickerThanTheLaunchCeremonys()
+        {
+            // «При нажатии кнопки меню и нашей текстовой сценки слишком долгий фейд — надо быстрее.»
+            // The same veil, two speeds, chosen by the REASON the reel is yielding.
+            Assert.AreEqual(AttractZones.DocumentReelFadeSeconds,
+                AttractZones.ReelFadeOutSecondsFor(ReelYield.Document), 1e-5f);
+            Assert.AreEqual(AttractZones.DocumentReelFadeSeconds,
+                AttractZones.ReelFadeInSecondsFor(ReelYield.Document), 1e-5f);
+            Assert.AreEqual(AttractZones.ReelFadeOutSeconds,
+                AttractZones.ReelFadeOutSecondsFor(ReelYield.Charge), 1e-5f,
+                "A charging control keeps the slow ceremony fade — the two tempos must not have merged.");
+            Assert.AreEqual(AttractZones.ReelFadeInSeconds,
+                AttractZones.ReelFadeInSecondsFor(ReelYield.Charge), 1e-5f);
+
+            Assert.Less(AttractZones.DocumentReelFadeSeconds, AttractZones.ReelFadeInSeconds,
+                "A pressed button must answer quicker than the launch ceremony's quickest half.");
+            Assert.GreaterOrEqual(AttractZones.DocumentReelFadeSeconds, 0.25f,
+                "…and still be a fade: quicker than this the veil reads as a cut and the seam at the zone " +
+                "mask flicks into view on the way past.");
+
+            // Press → readable text, and text gone → picture back: the whole gesture, both ways.
+            Assert.LessOrEqual(AttractZones.DocumentReelFadeSeconds + AboutLayout.FadeInSeconds, 0.8f,
+                "Press to readable text must stay under 0.8 s (it was 1.65 s).");
+            Assert.LessOrEqual(AboutLayout.FadeOutSeconds + AttractZones.DocumentReelFadeSeconds, 0.8f,
+                "Closing must be just as prompt as opening.");
+            Assert.Less(AboutLayout.FadeOutSeconds, AboutLayout.FadeInSeconds,
+                "The text leaves quicker than it arrives — it has to be gone before the picture may start back.");
+        }
+
+        [Test]
+        public void TitleWindows_FollowTheChargeFade_NeverTheDocumentOne()
+        {
+            // The title is hidden behind the document for the whole time the button tempo is in use, so
+            // it has nothing to synchronise with there. If a future retune ever wires it to the document's
+            // number, the title would start racing the picture on the charge path again.
+            Assert.AreEqual(AttractZones.ReelFadeOutSeconds * AttractZones.TitleChangeFraction,
+                AttractZones.TitleFadeOutSeconds, 1e-5f);
+            Assert.AreNotEqual(AttractZones.DocumentReelFadeSeconds * AttractZones.TitleChangeFraction,
+                AttractZones.TitleFadeOutSeconds,
+                "The title's window must be cut from the CHARGE fade, not from the document's.");
+            Assert.Greater(AttractZones.TitleFadeInSeconds, AttractZones.DocumentReelFadeSeconds * 0.5f,
+                "Sanity: the title still runs on the launch ceremony's clock, which is the slower one.");
+        }
+
         [Test]
         public void ReelFades_AreStillTheFounderApprovedDurations()
         {
@@ -56,6 +103,10 @@ namespace AiGameStudio.ArcadeHub.Tests
                 "«выцветают (медленно)» — the reel leaves over 1.2 s.");
             Assert.AreEqual(0.8f, AttractZones.ReelFadeInSeconds, 1e-5f,
                 "«при отжатии все восстанавливается» — and comes back over 0.8 s.");
+            Assert.AreEqual(0.5f, AttractZones.DocumentReelFadeSeconds, 1e-5f,
+                "…and the MENU button's own transition runs the same veil in 0.5 s, both ways.");
+            Assert.AreEqual(0.25f, AboutLayout.FadeInSeconds, 1e-5f, "The document arrives in 0.25 s.");
+            Assert.AreEqual(0.2f, AboutLayout.FadeOutSeconds, 1e-5f, "…and leaves in 0.2 s.");
         }
     }
 }

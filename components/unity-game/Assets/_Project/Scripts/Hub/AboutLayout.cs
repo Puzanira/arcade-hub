@@ -107,11 +107,22 @@ namespace AiGameStudio.ArcadeHub
 
         // ---- transitions ----
 
-        /// <summary>Document fade-IN, seconds (the reel's own fade-out is 1.2 s and runs underneath it).</summary>
-        public const float FadeInSeconds = 0.45f;
+        /// <summary>
+        /// Document fade-IN, seconds. It starts only once the reel has finished leaving, so this number
+        /// is the SECOND half of what the player waits after pressing MENU — which is why it was cut with
+        /// the reel's own document tempo (founder, 2026-08-08: «слишком долгий фейд — надо быстрее»).
+        /// Press to readable text is now <see cref="AttractZones.DocumentReelFadeSeconds"/> + this =
+        /// 0.75 s, against the 1.65 s that felt stuck. Not shorter: under ~0.2 s a full screen of text
+        /// arriving stops being a fade and starts being a flash.
+        /// </summary>
+        public const float FadeInSeconds = 0.25f;
 
-        /// <summary>Document fade-OUT, seconds — shorter than the reel's 0.8 s fade-in, so the picture is already coming back as the text leaves.</summary>
-        public const float FadeOutSeconds = 0.3f;
+        /// <summary>
+        /// Document fade-OUT, seconds — the text has to be gone before the picture may start coming back
+        /// (that order is the founder's), so it is kept shorter still: the whole way back is this plus
+        /// <see cref="AttractZones.DocumentReelFadeSeconds"/> = 0.7 s, as prompt as the way in.
+        /// </summary>
+        public const float FadeOutSeconds = 0.2f;
 
         /// <summary>
         /// [tune] Inactivity before the screen returns to the attract reel by itself. A cabinet in a

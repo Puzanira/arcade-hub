@@ -71,9 +71,9 @@ namespace AiGameStudio.ArcadeHub
 
         /// <summary>
         /// How far the reel is currently faded out, 0 (playing, full brightness) … 1 (fully veiled).
-        /// Ramps over <see cref="AttractZones.ReelFadeOutSeconds"/> /
-        /// <see cref="AttractZones.ReelFadeInSeconds"/>; the drawn alpha is this smoothstepped and scaled
-        /// by <see cref="AttractZones.ReelFadeMaxAlpha"/>.
+        /// Ramps over whichever duration the reason for yielding selects (see
+        /// <see cref="TickEngagement"/>); the drawn alpha is this smoothstepped and scaled by
+        /// <see cref="AttractZones.ReelFadeMaxAlpha"/>.
         /// </summary>
         public float FadeAmount => _fade01;
 
@@ -214,6 +214,13 @@ namespace AiGameStudio.ArcadeHub
         /// fading out, the title turning into the game's name and the bar appearing are one movement, and
         /// the reel comes back on exactly the signal the title returns to the cabinet name on.
         ///
+        /// <paramref name="why"/> selects the TEMPO, not the mechanism: a control easing the reel out of
+        /// the way is the founder's slow launch ceremony (1.2 s / 0.8 s), while a MENU press summoning the
+        /// «История проекта» document has to answer at once and runs the very same veil in
+        /// <see cref="AttractZones.DocumentReelFadeSeconds"/>. One fade, one pause, one return with sound —
+        /// two speeds. On the way back the caller passes the reason the reel LEFT, so a fade never changes
+        /// pace half way through.
+        ///
         /// Called from <see cref="AttractOverlay.Tick"/> rather than from this component's own
         /// <see cref="Update"/>: one driver, one clock, and the PlayMode tests that already step the
         /// overlay with a fixed dt step the fade deterministically too.
@@ -221,13 +228,13 @@ namespace AiGameStudio.ArcadeHub
         /// The clip is paused only once it has FULLY faded out — pausing on the first frame of the fade
         /// would cut the attract sound dead while the picture was still leaving.
         /// </summary>
-        public void TickEngagement(bool engaged, float dt)
+        public void TickEngagement(bool engaged, ReelYield why, float dt)
         {
             if (dt < 0f) dt = 0f;
 
             float perSecond = engaged
-                ? 1f / Mathf.Max(0.01f, AttractZones.ReelFadeOutSeconds)
-                : 1f / Mathf.Max(0.01f, AttractZones.ReelFadeInSeconds);
+                ? 1f / Mathf.Max(0.01f, AttractZones.ReelFadeOutSecondsFor(why))
+                : 1f / Mathf.Max(0.01f, AttractZones.ReelFadeInSecondsFor(why));
             _fade01 = Mathf.MoveTowards(_fade01, engaged ? 1f : 0f, perSecond * dt);
             ApplyFade();
 

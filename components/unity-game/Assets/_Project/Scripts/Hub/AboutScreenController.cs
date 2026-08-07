@@ -22,14 +22,21 @@ namespace AiGameStudio.ArcadeHub
     /// directions:
     ///
     /// <code>
-    ///   opening:  MENU ─► reel fades out (1.2 s) ─► veil at max ─► document fades in (0.45 s)
-    ///   closing:  MENU ─► document fades out (0.3 s) ─► fully gone ─► reel fades back in (0.8 s)
+    ///   opening:  MENU ─► reel fades out (0.5 s) ─► veil at max ─► document fades in (0.25 s)
+    ///   closing:  MENU ─► document fades out (0.2 s) ─► fully gone ─► reel fades back in (0.5 s)
     /// </code>
+    ///
+    /// Those are BUTTON speeds, not the launch ceremony's (founder, 2026-08-08: «при нажатии кнопки меню
+    /// и нашей текстовой сценки слишком долгий фейд — надо быстрее» — it used to be 1.2 s + 0.45 s). The
+    /// reel still runs its one veil-and-freeze; it simply runs it at
+    /// <see cref="AttractZones.DocumentReelFadeSeconds"/>, selected by the reason it is yielding
+    /// (<see cref="ReelYield.Document"/>). The charging-control fade is untouched.
     ///
     /// The hand-over points are read off the ACTUAL states — <see cref="AttractVideoScreen.FadeAmount"/>
     /// on the way in, this screen's own alpha on the way out — never off copies of the two durations.
-    /// Retuning <see cref="AttractZones.ReelFadeOutSeconds"/> or <see cref="AboutLayout.FadeInSeconds"/>
-    /// therefore cannot desynchronise them into the smeared cross-fade the founder rejected.
+    /// Retuning <see cref="AttractZones.DocumentReelFadeSeconds"/> or
+    /// <see cref="AboutLayout.FadeInSeconds"/> therefore cannot desynchronise them into the smeared
+    /// cross-fade the founder rejected — it only makes the same sequence quicker or slower.
     ///
     /// Three things are deliberately NOT owned here:
     /// • the reel's pause-with-a-fade is the one <see cref="AttractVideoScreen.TickEngagement"/> already

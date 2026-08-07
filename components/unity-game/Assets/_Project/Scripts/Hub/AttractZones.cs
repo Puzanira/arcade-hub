@@ -1,6 +1,32 @@
 namespace AiGameStudio.ArcadeHub
 {
     /// <summary>
+    /// WHY the attract reel is giving up the screen. One mechanism (the veil + freeze in
+    /// <see cref="AttractVideoScreen.TickEngagement"/>), two TEMPOS — because the two cases are two
+    /// different gestures for the player:
+    ///
+    /// • <see cref="Charge"/> — a control is being worked. The reel leaving is part of the launch
+    ///   ceremony the founder tuned by eye («выцветают (медленно)»): slow on the way out, a touch
+    ///   quicker back. Nobody pressed anything; the screen is easing out of the way.
+    ///
+    /// • <see cref="Document"/> — the MENU button was PRESSED and the «История проекта» screen is
+    ///   taking over. A button press has to answer at once (founder, 2026-08-08: «при нажатии кнопки
+    ///   меню и нашей текстовой сценки слишком долгий фейд — надо быстрее»), so the same veil runs at
+    ///   its own, much shorter duration.
+    ///
+    /// The reason is what selects the duration (<see cref="AttractZones.ReelFadeOutSecondsFor"/> /
+    /// <see cref="AttractZones.ReelFadeInSecondsFor"/>), so neither tempo can be retuned into the other.
+    /// </summary>
+    public enum ReelYield
+    {
+        /// <summary>A control is charging a slot — the launch ceremony's own pace.</summary>
+        Charge,
+
+        /// <summary>A full-screen screen was summoned by a button — button pace.</summary>
+        Document,
+    }
+
+    /// <summary>
     /// The attract reel's THREE ZONES, measured off the shipped clip itself
     /// (<c>StreamingAssets/Attract.mp4</c>, 1920×1080, 6.33 s, 152 frames) rather than eyeballed:
     /// every frame was diffed against the clip's flat background and the rows carrying ink were
@@ -141,6 +167,38 @@ namespace AiGameStudio.ArcadeHub
         public const float ReelFadeInSeconds = 0.8f;
 
         /// <summary>
+        /// The reel's fade when the screen is taken by a BUTTON rather than by a charging control —
+        /// the «История проекта» document (founder, 2026-08-08: «при нажатии кнопки меню и нашей
+        /// текстовой сценки слишком долгий фейд — надо быстрее»).
+        ///
+        /// The pair above is tuned for the launch ceremony: nothing was pressed, the reel is easing out
+        /// of a player's way, and 1.2 s of it reads as deliberate. A pressed button is the opposite kind
+        /// of moment — it has to answer — and at 1.2 s + the document's own arrival the cabinet felt
+        /// stuck («вязко»). Half a second is the shortest this fade can be while still being a FADE:
+        /// the veil ends up the same #262626 as the zone mask, so anything quicker starts to read as the
+        /// picture being cut rather than dimmed, and the seam at <see cref="MaskBottom"/> flickers into
+        /// view on the way past.
+        ///
+        /// ONE number for both directions, deliberately: the asymmetry above exists to make the launch
+        /// ceremony breathe, and a button press wants the same promptness opening and closing. Press to
+        /// text is 0.5 + <see cref="AboutLayout.FadeInSeconds"/>; text gone to reel back is
+        /// <see cref="AboutLayout.FadeOutSeconds"/> + 0.5.
+        ///
+        /// It is deliberately NOT wired into <see cref="TitleFadeOutSeconds"/> /
+        /// <see cref="TitleFadeInSeconds"/>: the launcher's title is hidden behind the document the whole
+        /// time this tempo is in use, so it has nothing to stay in step with here.
+        /// </summary>
+        public const float DocumentReelFadeSeconds = 0.5f;
+
+        /// <summary>Seconds the reel spends leaving, for the reason it is leaving.</summary>
+        public static float ReelFadeOutSecondsFor(ReelYield why) =>
+            why == ReelYield.Document ? DocumentReelFadeSeconds : ReelFadeOutSeconds;
+
+        /// <summary>Seconds the reel spends coming back, for the reason it left.</summary>
+        public static float ReelFadeInSecondsFor(ReelYield why) =>
+            why == ReelYield.Document ? DocumentReelFadeSeconds : ReelFadeInSeconds;
+
+        /// <summary>
         /// How far the reel fades: a veil in the clip's OWN background tone, so a faded reel becomes the
         /// same flat #262626 the masked band already is (no seam at <see cref="MaskBottom"/>, which a
         /// fade-to-black would tear open). FULLY opaque — founder tune 2026-08-08 («уводить ещё сильнее,
@@ -170,7 +228,9 @@ namespace AiGameStudio.ArcadeHub
         /// stops looking connected to the picture at all.
         ///
         /// Derived, never duplicated: retuning <see cref="ReelFadeOutSeconds"/> or
-        /// <see cref="ReelFadeInSeconds"/> moves the title with them.
+        /// <see cref="ReelFadeInSeconds"/> moves the title with them. Of the CHARGE pair only — the
+        /// document's own tempo (<see cref="DocumentReelFadeSeconds"/>) runs while the title is hidden
+        /// behind the document, so there is nothing for it to synchronise with there.
         /// </summary>
         public const float TitleChangeFraction = 0.75f;
 
