@@ -223,6 +223,15 @@ namespace AiGameStudio.ArcadeHub.Tests
         {
             yield return LoadAttractScreen();
 
+            // The name counts the GAMES on the cabinet, so it moves with the layout (founder, 2026-08-07:
+            // «Таблетка в космосе» deferred → «7 режимов суеты» became «6 режимов суеты»). Pinned as a
+            // literal here on purpose: every other assertion goes through the constant and would happily
+            // follow a wrong rename.
+            Assert.AreEqual("6 режимов суеты", AttractOverlay.CabinetName,
+                "The idle title names the cabinet by its CURRENT game count.");
+            Assert.AreEqual(6, _htl.Config.slots.Count,
+                "…and that count must match the shipped layout — a renamed cabinet with a stale slot list lies to the player.");
+
             Assert.AreEqual(AttractOverlay.CabinetName, _overlay.ShownTitle,
                 "Idle attract screen names the cabinet.");
             Assert.AreEqual(AttractOverlay.CabinetName, _overlay.TitleLabel.text);
@@ -544,8 +553,13 @@ namespace AiGameStudio.ArcadeHub.Tests
         {
             yield return LoadAttractScreen();
 
-            // Bang = «Таблетка в космосе», a planned slot: it charges the bar exactly like an installed one
-            // and, at full, swaps the launch for the "СКОРО" line and resets.
+            // relayout-v1 (2026-08-07): the shipped config has no planned slot left (six games, all
+            // installed), so the planned-slot ending is driven from an INJECTED layout — Bang =
+            // «Таблетка в космосе», deferred out of the cabinet's first iteration. It charges the bar
+            // exactly like an installed slot and, at full, swaps the launch for the "СКОРО" line and resets.
+            _htl.InitializeWith(HoldToLaunchPlayModeTests.PlannedSlotConfig());
+            _htl.AutoTick = false;
+
             int guard = 0;
             while (!_htl.ComingSoonVisible && guard < 120)
             {

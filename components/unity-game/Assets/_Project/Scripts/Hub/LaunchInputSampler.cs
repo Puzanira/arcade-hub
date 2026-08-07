@@ -8,7 +8,8 @@ namespace AiGameStudio.ArcadeHub
     /// per-control-kind rule from the cabinet spec (§2.3):
     /// <list type="bullet">
     ///   <item>buttons — held;</item>
-    ///   <item>height sensors — value above a threshold (a physical push);</item>
+    ///   <item>height sensors — value above a threshold (a physical push); a "Height" slot takes EITHER
+    ///         sensor (max of the two) against that same threshold;</item>
     ///   <item>joystick — deflection magnitude above a threshold;</item>
     ///   <item>crank — |degrees this frame| above a threshold, latched for a short timeout so the gaps
     ///         between discrete turns don't read as "released".</item>
@@ -54,6 +55,10 @@ namespace AiGameStudio.ArcadeHub
                 case LaunchControl.BangButton: return r.BangHeld;
                 case LaunchControl.HeightA: return r.HeightA > _t.heightEngageThreshold;
                 case LaunchControl.HeightB: return r.HeightB > _t.heightEngageThreshold;
+                // EITHER sensor: the loudest of the two against the SAME threshold a single sensor uses.
+                // Engagement is a boolean, so both hands down reads exactly like one — the charge machine
+                // can never run at double speed off a two-sensor slot.
+                case LaunchControl.Height: return Math.Max(r.HeightA, r.HeightB) > _t.heightEngageThreshold;
                 case LaunchControl.Joystick:
                 {
                     float mag = (float)Math.Sqrt(r.JoystickX * r.JoystickX + r.JoystickY * r.JoystickY);

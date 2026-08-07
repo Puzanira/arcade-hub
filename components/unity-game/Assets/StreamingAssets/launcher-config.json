@@ -25,10 +25,10 @@
     },
     {
       "controlName": "BangButton",
-      "displayName": "Таблетка в космосе",
-      "entryScene": "",
-      "status": "soon",
-      "rainSprite": "RainSprites/ArcadeStar"
+      "displayName": "Кошачьи будни",
+      "entryScene": "Apartment",
+      "status": "installed",
+      "rainSprite": "RainSprites/CatPaw"
     },
     {
       "controlName": "Joystick",
@@ -38,7 +38,7 @@
       "rainSprite": "RainSprites/ZenStones"
     },
     {
-      "controlName": "HeightA",
+      "controlName": "Height",
       "displayName": "Lady Bug Hit The Road",
       "entryScene": "Packages/com.aigamestudio.game-lady-bug/Scenes/Main",
       "status": "installed",
@@ -55,13 +55,6 @@
         "RainSprites/LotusBlue",
         "RainSprites/LotusPink"
       ]
-    },
-    {
-      "controlName": "HeightB",
-      "displayName": "Кошачьи будни",
-      "entryScene": "Apartment",
-      "status": "installed",
-      "rainSprite": "RainSprites/CatPaw"
     }
   ],
   "tuning": {

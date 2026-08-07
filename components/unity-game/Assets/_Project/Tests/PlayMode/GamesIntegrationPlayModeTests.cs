@@ -13,7 +13,9 @@ using AiGameStudio.ArcadeHub;
 namespace AiGameStudio.ArcadeHub.Tests
 {
     /// <summary>
-    /// all-games-wiring (founder's layout 2026-07-26): the launcher runs SIX real games. Drives the whole
+    /// all-games-wiring, relayout-v1 (founder's layout 2026-08-07): the launcher runs SIX real games on six
+    /// slots — «Кошачьи будни» on the «!» button, Lady Bug on EITHER height sensor, and no reserved slot.
+    /// Drives the whole
     /// loop headless with a <see cref="FakeBackend"/> — menu → game scene → back to the menu — for every
     /// installed slot, entering each the ONLY way the cabinet launches (founder's gate-2 decision:
     /// instant-select is gone): holding/cranking the slot's OWN control until the hold-to-launch charge
@@ -42,8 +44,10 @@ namespace AiGameStudio.ArcadeHub.Tests
         private static BackendSnapshot HoldSisyphus => new BackendSnapshot { CrankDeltaDegrees = 10f }; // Crank
         private static BackendSnapshot HoldFactory => new BackendSnapshot { RedHeld = true };           // RedButton
         private static BackendSnapshot HoldLifeChoices => new BackendSnapshot { GreenHeld = true };     // GreenButton
-        private static BackendSnapshot HoldLadyBug => new BackendSnapshot { HeightA = 1f };             // HeightA
-        private static BackendSnapshot HoldHomeAlone => new BackendSnapshot { HeightB = 1f };           // HeightB
+        // Lady Bug answers EITHER height sensor (relayout-v1, 2026-08-07): one slot, both sensors. One
+        // palm is the gesture — sensor A here, sensor B is covered in HoldToLaunchPlayModeTests.
+        private static BackendSnapshot HoldLadyBug => new BackendSnapshot { HeightA = 1f };             // Height (A or B)
+        private static BackendSnapshot HoldHomeAlone => new BackendSnapshot { BangHeld = true };        // BangButton «!»
         // Joystick: the slot engages on deflection MAGNITUDE past the tuning threshold (0.5), so a full
         // push on one axis is the gesture — the same "hold your own control" rule as the buttons.
         private static BackendSnapshot HoldMeditation => new BackendSnapshot { Joystick = Vector2.up };  // Joystick
@@ -248,7 +252,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [UnityTest]
-        public IEnumerator LadyBug_LaunchesByHeightAHold_IsAlive_ReturnsViaWatchdogPump()
+        public IEnumerator LadyBug_LaunchesByHeightSensorHold_IsAlive_ReturnsViaWatchdogPump()
         {
             // Legacy Input Manager game: never pumps ArcadeInput — the return MUST go through the
             // watchdog's own runner, which this test leaves alive (the honest production path).
@@ -256,7 +260,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [UnityTest]
-        public IEnumerator HomeAlone_LaunchesByHeightBHold_IsAlive_ReturnsByMenuButton()
+        public IEnumerator HomeAlone_LaunchesByBangHold_IsAlive_ReturnsByMenuButton()
         {
             yield return RunGame(HoldHomeAlone, "Apartment", "HomeAlone", "hub-into-homealone.png", nativeInput: false);
         }

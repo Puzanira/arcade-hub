@@ -14,6 +14,15 @@ namespace AiGameStudio.ArcadeHub
         BangButton,
         HeightA,
         HeightB,
+
+        /// <summary>
+        /// EITHER height sensor (relayout-v1, founder 2026-08-07): the two contactless sensors sit side by
+        /// side under one pair of hands, so the cabinet binds ONE slot to both — a palm over A or over B
+        /// (or over both) charges the same slot, by the same threshold rule as a single sensor. Not a
+        /// second control: holding both is exactly as fast as holding one, never twice as fast.
+        /// </summary>
+        Height,
+
         Joystick
     }
 
@@ -31,6 +40,7 @@ namespace AiGameStudio.ArcadeHub
                 case "bangbutton": case "bang": return LaunchControl.BangButton;
                 case "heighta": return LaunchControl.HeightA;
                 case "heightb": return LaunchControl.HeightB;
+                case "height": case "heightany": return LaunchControl.Height;
                 case "joystick": return LaunchControl.Joystick;
                 default: return LaunchControl.None;
             }
