@@ -28,6 +28,30 @@ namespace AiGameStudio.ArcadeHub.Tests
         private static BackendSnapshot Bang() => new BackendSnapshot { BangHeld = true };
         private static readonly BackendSnapshot Neutral = default;
 
+        /// <summary>
+        /// A config that still HAS a planned slot. Since relayout-v1 the shipped one does not (six games,
+        /// all installed), but the "СКОРО" ending is launcher behaviour, not config data — so the tests
+        /// that cover it inject their own layout: Sisyphus on the crank (so the one-hot assertions have a
+        /// second game to not leak) and the deferred «Таблетка в космосе» on Bang.
+        /// </summary>
+        internal static LauncherConfig PlannedSlotConfig() => new LauncherConfig
+        {
+            slots = new List<LauncherSlot>
+            {
+                new LauncherSlot
+                {
+                    controlName = "Crank", displayName = "Бесконечный Сизиф",
+                    entryScene = "Packages/com.aigamestudio.game-endless-sisyphus/Scenes/Main",
+                    status = "installed", nativeInput = true, rainSprite = "RainSprites/Boulder",
+                },
+                new LauncherSlot
+                {
+                    controlName = "BangButton", displayName = "Таблетка в космосе",
+                    entryScene = "", status = "soon", rainSprite = "RainSprites/ArcadeStar",
+                },
+            }
+        };
+
         private void TakeOverInput()
         {
             var runner = Object.FindAnyObjectByType<ArcadeInputRunner>();
@@ -190,12 +214,59 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsNotNull(game, "Sisyphus scene should have booted its game object from the launcher.");
         }
 
+        /// <summary>
+        /// relayout-v1 (founder, 2026-08-07): Lady Bug hangs on «любой из двух датчиков высоты» — ONE slot
+        /// fed by BOTH sensors. Proven against the SHIPPED config in the live menu scene (the EditMode
+        /// sampler tests pin the rule; this pins that the cabinet's own binding actually carries it).
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LadyBugSlot_ChargesFromEitherHeightSensor()
+        {
+            yield return LoadMenuAndTakeOver();
+
+            int ladyBug = _htl.Config.slots.FindIndex(s => s.displayName == "Lady Bug Hit The Road");
+            Assert.GreaterOrEqual(ladyBug, 0, "The shipped config must carry the Lady Bug slot.");
+
+            // Sensor A alone charges it.
+            for (int i = 0; i < 10; i++)
+                yield return Step(new BackendSnapshot { HeightA = 1f }, 0.1f);
+            Assert.AreEqual(ladyBug, _htl.ActiveSlot, "A palm over sensor A must charge the Lady Bug slot.");
+            Assert.Greater(_htl.Charge, 0.1f, "…and the bar must actually be growing.");
+
+            // Release both and let it decay back to idle.
+            for (int i = 0; i < 20 && _htl.ActiveSlot >= 0; i++)
+                yield return Step(Neutral, 0.1f);
+            Assert.AreEqual(-1, _htl.ActiveSlot, "Both sensors released -> the slot drops.");
+
+            // Sensor B alone charges the SAME slot — the two sensors are one launch surface.
+            for (int i = 0; i < 10; i++)
+                yield return Step(new BackendSnapshot { HeightB = 1f }, 0.1f);
+            Assert.AreEqual(ladyBug, _htl.ActiveSlot, "A palm over sensor B must charge the very same slot.");
+            float afterB = _htl.Charge;
+
+            // Both hands down is NOT a second signal: the charge keeps advancing at one rate.
+            float before = _htl.Charge;
+            for (int i = 0; i < 5; i++)
+                yield return Step(new BackendSnapshot { HeightA = 1f, HeightB = 1f }, 0.1f);
+            Assert.AreEqual(ladyBug, _htl.ActiveSlot, "Both sensors down: still the same single slot.");
+            Assert.AreEqual(before + 0.5f / 5f, _htl.Charge, 0.02f,
+                "Both hands down charges at the SAME rate as one hand — never twice as fast.");
+            Assert.Greater(afterB, 0.1f, "Sensor B alone really did charge the bar.");
+        }
+
         [UnityTest]
         public IEnumerator PlannedSlot_ToFull_ShowsComingSoon_ResetsAndDoesNotLaunch()
         {
             yield return LoadMenuAndTakeOver();
 
-            // Hold Bang (slot 3 = «Таблетка в космосе», 'soon') until the overlay appears.
+            // relayout-v1 (2026-08-07): the SHIPPED config has NO planned slot any more — all six games are
+            // installed and «Таблетка в космосе» left the menu with the first iteration. The "СКОРО" path is
+            // still live launcher behaviour (the next reserved game will use it), so it is proven here
+            // against an INJECTED config instead of the shipped one.
+            _htl.InitializeWith(PlannedSlotConfig());
+            _htl.AutoTick = false;
+
+            // Hold Bang (the injected planned slot) until the overlay appears.
             int guard = 0;
             while (!_htl.ComingSoonVisible && guard < 120)
             {

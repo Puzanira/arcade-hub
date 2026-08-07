@@ -29,7 +29,7 @@ namespace AiGameStudio.ArcadeHub
     ///   end-to-end and wrapping the scroll by one period. It is set in a LIGHT face, not the heavy
     ///   display one the title uses (founder, 2026-08-05: «текст титров не жирным — он плохо читается»).
     ///
-    /// • <b>Title</b> (the clip's old title zone) — the CABINET's name «7 режимов суеты» while nobody
+    /// • <b>Title</b> (the clip's old title zone) — the CABINET's name «6 режимов суеты» while nobody
     ///   is playing, and the NAME OF THE GAME a control launches the moment that control is worked.
     ///   The signal is the very one hold-to-launch charges against
     ///   (<see cref="IAttractSlotSource.ActiveSlot"/>), so the title can never disagree with the bar
@@ -53,8 +53,12 @@ namespace AiGameStudio.ArcadeHub
     [DisallowMultipleComponent]
     public sealed class AttractOverlay : MonoBehaviour
     {
-        /// <summary>The cabinet's own name — what the screen says when nobody is playing.</summary>
-        public const string CabinetName = "7 режимов суеты";
+        /// <summary>
+        /// The cabinet's own name — what the screen says when nobody is playing. The number counts the
+        /// GAMES on the cabinet, so it moves with the layout: relayout-v1 (founder, 2026-08-07) deferred
+        /// «Таблетка в космосе» out of the first iteration, and «7 режимов суеты» became «6 режимов суеты».
+        /// </summary>
+        public const string CabinetName = "6 режимов суеты";
 
         /// <summary>
         /// The authors, read off the shipped clip's baked credits line (which is legible but dim).
@@ -379,7 +383,7 @@ namespace AiGameStudio.ArcadeHub
             _title.font = _font;
             _title.alignment = TextAnchor.MiddleCenter;
             _title.raycastTarget = false;
-            // Best-fit rather than a fixed size: «7 режимов суеты» gets to be huge while a long slot name
+            // Best-fit rather than a fixed size: «6 режимов суеты» gets to be huge while a long slot name
             // like «Последняя смена (Factory)» shrinks instead of overflowing into the hands zone.
             _title.resizeTextForBestFit = true;
             _title.resizeTextMinSize = titleFontSizeMin;

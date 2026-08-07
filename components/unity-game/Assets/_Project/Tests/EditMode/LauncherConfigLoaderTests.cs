@@ -62,11 +62,13 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [Test]
-        public void ShippedConfig_MatchesFoundersLayout_SixInstalled_OneSoon_NoTestGame()
+        public void ShippedConfig_MatchesFoundersLayout_SixInstalled_NoSoon_NoTestGame()
         {
-            // all-games-wiring (founder's layout 2026-07-26, Медитация landed 2026-08-01): SIX installed
-            // games, ONE "soon" placeholder, and NO built-in Test Game slot (its scene/rig stay in the
-            // project but leave the launcher menu).
+            // relayout-v1 (founder, 2026-08-07): the seventh game (Arcade Prototype / «Таблетка в космосе»)
+            // does NOT ride the cabinet's first iteration, so its "soon" slot is gone entirely — SIX slots,
+            // ALL installed, no placeholder. «Кошачьи будни» moved onto the freed «!» button, and Lady Bug
+            // now answers to EITHER height sensor through the single "Height" binding. Still no built-in
+            // Test Game slot (its scene/rig stay in the project but leave the launcher menu).
             LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
 
             int installed = 0, soon = 0;
@@ -75,26 +77,31 @@ namespace AiGameStudio.ArcadeHub.Tests
                 if (s.IsInstalled) installed++;
                 else soon++;
             }
-            Assert.AreEqual(7, config.slots.Count, "Seven cabinet controls -> seven slots.");
+            Assert.AreEqual(6, config.slots.Count, "Six games -> six slots (the reserved slot is gone).");
             Assert.AreEqual(6, installed,
                 "Sisyphus, Factory, Life Choices, Lady Bug, Home Alone, Медитация are installed.");
-            Assert.AreEqual(1, soon, "Only Arcade Prototype is still 'soon'.");
+            Assert.AreEqual(0, soon, "Nothing is 'soon' any more — every shipped slot launches a real game.");
 
             Assert.IsNull(config.slots.Find(s => s.displayName == "Test Game"),
                 "Test Game must NOT appear in the shipped launcher menu.");
+            Assert.IsNull(config.slots.Find(s => s.displayName == "Таблетка в космосе"),
+                "The reserved Arcade Prototype slot must be gone from the shipped menu.");
 
             // Each installed game sits on its founder-assigned control with a real entry scene.
             AssertInstalledOn(config, "Crank",       "Бесконечный Сизиф");
             AssertInstalledOn(config, "RedButton",   "Последняя смена");
             AssertInstalledOn(config, "GreenButton", "Спасибо, не надо");
-            AssertInstalledOn(config, "HeightA",     "Lady Bug Hit The Road");
-            AssertInstalledOn(config, "HeightB",     "Кошачьи будни");
+            AssertInstalledOn(config, "BangButton",  "Кошачьи будни");
+            AssertInstalledOn(config, "Height",      "Lady Bug Hit The Road");
             AssertInstalledOn(config, "Joystick",    "Медитация в спешке");
 
-            // The one "soon" slot is a placeholder — a planned control binding, no entry scene.
-            LauncherSlot bang = config.slots.Find(s => s.controlName == "BangButton");
-            Assert.AreEqual("Таблетка в космосе", bang.displayName);
-            Assert.IsFalse(bang.IsInstalled, "Arcade Prototype is a 'soon' placeholder.");
+            // No slot may claim a SINGLE height sensor any more: the two sensors are one launch surface,
+            // and a leftover HeightA/HeightB binding would make one palm position dead.
+            Assert.IsNull(config.slots.Find(s => s.controlName == "HeightA" || s.controlName == "HeightB"),
+                "The height sensors are bound as one 'Height' slot, never individually.");
+            Assert.AreEqual(LaunchControl.Height,
+                LaunchControls.Parse(config.slots.Find(s => s.displayName == "Lady Bug Hit The Road").controlName),
+                "Lady Bug's binding must parse to the either-sensor control.");
 
             // Native-input games (legacy/raw input) carry the pump flag so the return watchdog stays live.
             Assert.IsTrue(config.slots.Find(s => s.displayName == "Lady Bug Hit The Road").nativeInput, "Lady Bug is native-input.");
@@ -123,7 +130,7 @@ namespace AiGameStudio.ArcadeHub.Tests
             // themed sprites. Each declared Resources path must actually LOAD (a typo'd path would silently
             // fall back to the solid tile; the runtime fallback stays, but the shipped config must be clean).
             LauncherConfig config = LauncherConfigLoader.LoadFromStreamingAssets();
-            Assert.AreEqual(7, config.slots.Count);
+            Assert.AreEqual(6, config.slots.Count);
 
             foreach (LauncherSlot slot in config.slots)
             {

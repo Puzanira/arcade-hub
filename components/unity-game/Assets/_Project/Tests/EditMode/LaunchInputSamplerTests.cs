@@ -49,6 +49,75 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 0.51f }, 0.1f));
         }
 
+        /// <summary>
+        /// relayout-v1 (founder, 2026-08-07): Lady Bug hangs on "любой из двух датчиков высоты" — ONE slot,
+        /// two sensors. Either palm engages it, by the SAME threshold a single-sensor slot uses.
+        /// </summary>
+        [Test]
+        public void Height_EitherSensor_EngagesTheSameSlot()
+        {
+            var s = new LaunchInputSampler(Slots("Height"), Tuning());
+            Assert.AreEqual(LaunchControl.Height, s.ControlAt(0), "\"Height\" binds the either-sensor control.");
+
+            Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 0.51f, HeightB = 0f }, 0.1f),
+                "A palm over sensor A alone engages the slot.");
+            Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 0f, HeightB = 0.51f }, 0.1f),
+                "A palm over sensor B alone engages it just as well.");
+            Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 0.9f, HeightB = 0.8f }, 0.1f),
+                "Both hands down: still engaged (one boolean, never a doubled signal).");
+        }
+
+        [Test]
+        public void Height_EitherSensor_UsesTheSameThreshold_AndNeitherSensorAloneSneaksUnderIt()
+        {
+            var s = new LaunchInputSampler(Slots("Height"), Tuning());
+            Assert.IsFalse(SampleOne(s, new ControlReadings { HeightA = 0.49f, HeightB = 0.49f }, 0.1f),
+                "Two sub-threshold sensors must NOT add up to an engagement — the rule is max, not sum.");
+            Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 0.49f, HeightB = 0.51f }, 0.1f),
+                "…and the louder of the two decides, exactly as for a single sensor.");
+        }
+
+        [Test]
+        public void Height_EitherSensor_DisengagesOnlyWhenBothAreReleased()
+        {
+            var s = new LaunchInputSampler(Slots("Height"), Tuning());
+            Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 1f, HeightB = 1f }, 0.1f));
+            Assert.IsTrue(SampleOne(s, new ControlReadings { HeightA = 0f, HeightB = 1f }, 0.1f),
+                "Lifting one hand keeps the charge alive while the other stays down.");
+            Assert.IsFalse(SampleOne(s, new ControlReadings { HeightA = 0f, HeightB = 0f }, 0.1f),
+                "Engagement drops only once BOTH sensors are released.");
+        }
+
+        /// <summary>
+        /// The founder-facing half of "не в два раза быстрее": engagement is a boolean, so the charge
+        /// machine advances at exactly one rate no matter how many sensors are covered. Driven through the
+        /// real <see cref="LaunchChargeMachine"/>, because that is where a "two signals = twice as fast"
+        /// mistake would actually show up.
+        /// </summary>
+        [Test]
+        public void Height_BothSensorsHeld_ChargeAtTheSameRateAsOne()
+        {
+            float ChargeAfter(ControlReadings held, int frames)
+            {
+                var sampler = new LaunchInputSampler(Slots("Height"), Tuning());
+                var machine = new LaunchChargeMachine(new LaunchTuning { chargeSeconds = 5f, decaySeconds = 1f });
+                var engaged = new bool[sampler.Count];
+                for (int i = 0; i < frames; i++)
+                {
+                    sampler.Sample(held, 0.1f, engaged);
+                    machine.Tick(engaged, 0.1f);
+                }
+                return machine.Charge;
+            }
+
+            float oneSensor = ChargeAfter(new ControlReadings { HeightA = 1f }, 25);
+            float bothSensors = ChargeAfter(new ControlReadings { HeightA = 1f, HeightB = 1f }, 25);
+
+            Assert.AreEqual(0.5f, oneSensor, 0.02f, "2.5s of a 5s charge is half the bar.");
+            Assert.AreEqual(oneSensor, bothSensors, 1e-5f,
+                "Both hands down must charge at the SAME rate as one — never twice as fast.");
+        }
+
         [Test]
         public void Joystick_EngagedByDeflectionMagnitude()
         {
