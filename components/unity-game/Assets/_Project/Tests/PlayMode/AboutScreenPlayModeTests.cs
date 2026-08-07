@@ -84,8 +84,15 @@ namespace AiGameStudio.ArcadeHub.Tests
         // A real press: one frame held, then released — the edge the screen toggles on.
         private IEnumerator PressMenu()
         {
-            yield return Step(new BackendSnapshot { MenuHeld = true }, 0.1f, 1);
-            yield return Step(Neutral, 0.1f, 1);
+            yield return PressMenu(0.1f);
+        }
+
+        // The press with an explicit frame length. The sequence tests use a SHORT one so the press
+        // itself does not consume most of the transition they are there to watch.
+        private IEnumerator PressMenu(float dt)
+        {
+            yield return Step(new BackendSnapshot { MenuHeld = true }, dt, 1);
+            yield return Step(Neutral, dt, 1);
         }
 
         // Prepare/decode runs on a real-time background thread while test frames can spin far faster,
@@ -133,13 +140,112 @@ namespace AiGameStudio.ArcadeHub.Tests
 
             yield return PressMenu();
             Assert.IsFalse(_about.IsOpen, "A second MENU press closes the document.");
-            Assert.IsFalse(_video.IsChargePaused, "The reel un-freezes the moment the document starts leaving.");
+            // The reel does NOT un-freeze here any more — it waits out the document's own fade first
+            // (founder, 2026-08-08). That order is pinned in detail by the two sequence tests below.
 
-            yield return Step(Neutral, 0.1f, 15); // the reel's 0.8 s fade back in
+            yield return Step(Neutral, 0.1f, 20); // document 0.3 s out, then the reel's 0.8 s back in
+            Assert.IsFalse(_video.IsChargePaused, "The reel is playing again once the document has gone.");
             Assert.AreEqual(0f, _video.FadeAmount, 1e-3f, "The reel comes back to full brightness.");
             Assert.AreEqual(0f, _about.DocumentAlpha, 1e-3f, "The document is gone.");
             Assert.IsFalse(_about.Canvas.gameObject.activeSelf, "A closed document draws nothing at all.");
             Assert.IsFalse(_overlay.ChromeHidden, "The title + ticker come back with the reel.");
+        }
+
+        // ---------------- the hand-over is SEQUENTIAL, never a cross-fade ----------------
+
+        [UnityTest]
+        public IEnumerator Opening_ShowsNoTextUntilTheReelHasFullyFadedOut()
+        {
+            // Founder, 2026-08-08: «пока происходит фейд видео, уже виден текст, грязно. Нужно: СНАЧАЛА
+            // выцветает видео, ПОТОМ на него вцветает текст.»
+            yield return LoadHub();
+            yield return RequirePreparedVideo();
+
+            yield return PressMenu(0.02f); // short frame: the reel's fade is what this test watches
+            Assert.IsTrue(_about.IsOpen);
+            Assert.IsTrue(_about.IsWaitingForReel, "The document must first wait for the reel to leave.");
+
+            // Walk the WHOLE reel fade: while the veil is anywhere short of its maximum, not one pixel
+            // of text may be on screen. Driven off the veil's real state, so the loop is exact however
+            // the durations are retuned.
+            int seenMidFade = 0;
+            int guard = 0;
+            while (_video.FadeAmount < 1f && guard < 200)
+            {
+                Assert.AreEqual(0f, _about.DocumentAlpha, 1e-4f,
+                    $"Mid-fade (veil {_video.FadeAmount:F2}): the document must still be COMPLETELY invisible.");
+                if (_video.FadeAmount > 0.05f && _video.FadeAmount < 0.95f) seenMidFade++;
+                yield return Step(Neutral, 0.05f, 1);
+                guard++;
+            }
+
+            // The assertion above really was exercised on a genuinely half-faded picture over many
+            // frames, not on a single instant cut.
+            Assert.Greater(seenMidFade, 5, "The reel really did fade gradually with no text over it.");
+
+            // Now the veil is at max: the document — and only now — starts arriving.
+            Assert.AreEqual(1f, _video.FadeAmount, 1e-3f, "The reel has finished leaving.");
+            Assert.IsFalse(_about.IsWaitingForReel);
+            Assert.IsTrue(_video.IsChargePaused, "The picture is frozen before the text arrives.");
+            Assert.AreEqual(0f, _about.DocumentAlpha, 1e-4f, "Text has still not started at the hand-over point.");
+
+            yield return Step(Neutral, 0.05f, 4); // 0.2 s of the document's own 0.45 s fade-in
+            float midway = _about.DocumentAlpha;
+            Assert.Greater(midway, 0f, "The document starts arriving once the reel has gone.");
+            Assert.Less(midway, 1f, "…and it arrives by fading, not by cutting in.");
+            Assert.AreEqual(1f, _video.FadeAmount, 1e-3f, "The reel stays fully gone while the text arrives.");
+
+            yield return Step(Neutral, 0.1f, 8);
+            Assert.AreEqual(1f, _about.DocumentAlpha, 1e-3f, "The document settles fully opaque.");
+        }
+
+        [UnityTest]
+        public IEnumerator Closing_KeepsTheReelAwayUntilTheDocumentHasFullyGone()
+        {
+            yield return LoadHub();
+            yield return RequirePreparedVideo();
+
+            yield return PressMenu();
+            yield return Step(Neutral, 0.1f, 20);
+            Assert.AreEqual(1f, _about.DocumentAlpha, 1e-3f, "Precondition: the document is up.");
+            Assert.AreEqual(1f, _video.FadeAmount, 1e-3f, "Precondition: the reel is fully away.");
+
+            yield return PressMenu(0.02f); // close, on a short frame so the fade-out is watchable
+            Assert.IsFalse(_about.IsOpen);
+            Assert.Greater(_about.DocumentAlpha, 0.5f, "The document leaves by fading, not by cutting out.");
+
+            // Walk the document's own fade-out: for as long as ANY of it is still drawn, the reel must
+            // stay exactly where it is — fully veiled and frozen.
+            int seenMidFade = 0;
+            int guard = 0;
+            while (_about.DocumentAlpha > 0f && guard < 200)
+            {
+                Assert.AreEqual(1f, _video.FadeAmount, 1e-3f,
+                    $"Document still visible (alpha {_about.DocumentAlpha:F2}): the reel must NOT have started coming back.");
+                Assert.IsTrue(_video.IsChargePaused, "…and it must still be frozen.");
+                Assert.IsTrue(_overlay.ChromeHidden, "…and the title/ticker must not surface through it.");
+                seenMidFade++;
+                yield return Step(Neutral, 0.05f, 1);
+                guard++;
+            }
+            Assert.Greater(seenMidFade, 3, "The document really did fade out over several frames.");
+
+            Assert.AreEqual(0f, _about.DocumentAlpha, 1e-4f, "The document has gone.");
+            yield return Step(Neutral, 0.05f, 3);
+            Assert.Less(_video.FadeAmount, 1f, "Only now does the reel start coming back.");
+            Assert.Greater(_video.FadeAmount, 0f, "…and it comes back by fading, not by cutting in.");
+
+            yield return Step(Neutral, 0.1f, 12);
+            Assert.AreEqual(0f, _video.FadeAmount, 1e-3f, "The reel is fully back.");
+            Assert.IsFalse(_overlay.ChromeHidden, "The title + ticker come back with it.");
+        }
+
+        [Test]
+        public void Veil_GoesAllTheWay_SoTheHandsCannotGhostThrough()
+        {
+            // Founder, 2026-08-08: «контролы (руки на видео) должны выцветать ДО КОНЦА».
+            Assert.AreEqual(1f, AttractZones.ReelFadeMaxAlpha, 1e-4f,
+                "The veil must reach FULL opacity — a fully faded reel shows nothing of the hands.");
         }
 
         // ---------------- (б) nothing launches from under the document ----------------
@@ -169,9 +275,13 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.AreEqual(HubScenes.HubMenu, SceneManager.GetActiveScene().name,
                 "Scrolling must never start Meditation.");
 
-            // And the launcher is live again the moment the document is closed.
+            // And the launcher is live again once the document has actually left the screen (the mute
+            // outlasts the MENU press by the document's own fade-out — nothing may charge under a
+            // document that is still half-drawn).
             yield return PressMenu();
-            Assert.IsFalse(_htl.Suspended, "Closing the document hands the controls back to the launcher.");
+            Assert.IsTrue(_htl.Suspended, "Still muted while the document is fading out.");
+            yield return Step(Neutral, 0.1f, 6);
+            Assert.IsFalse(_htl.Suspended, "Once the document has gone, the controls are the launcher's again.");
             yield return Step(new BackendSnapshot { RedHeld = true }, 0.1f, 10);
             Assert.Greater(_htl.Charge, 0f, "After closing, a held control charges again.");
         }
@@ -294,9 +404,30 @@ namespace AiGameStudio.ArcadeHub.Tests
             yield return Step(Neutral, 0.1f, 2);
             yield return Capture("hub-about-attract.png");
 
-            // (b) the document, fully faded in and scrolled to where a photo placeholder is on screen.
+            // (a2) the moment the reel is HALF gone: a dimming picture and, deliberately, no text at all.
             yield return PressMenu();
-            yield return Step(Neutral, 0.1f, 20);
+            int guard = 0;
+            while (_video.FadeAmount < 0.5f && guard < 200) { yield return Step(Neutral, 0.05f, 1); guard++; }
+            Assert.AreEqual(0f, _about.DocumentAlpha, 1e-4f, "Mid-reel-fade still has no text on it.");
+            yield return Capture("hub-about-reelfading.png");
+
+            // (b1) the HAND-OVER: the veil has arrived at full, the text is on its way in (founder's
+            // requested still — «вуаль дошла, текст на полпути»).
+            guard = 0;
+            while (_video.FadeAmount < 1f && guard < 200) { yield return Step(Neutral, 0.05f, 1); guard++; }
+            Assert.AreEqual(0f, _about.DocumentAlpha, 1e-4f, "No text until the veil is home.");
+
+            // The bare fully-veiled field, with no document over it yet: this is the frame where a seam
+            // at AttractZones.MaskBottom (veil vs zone mask) would show, if the veil were not fully opaque.
+            yield return Capture("hub-about-veiled.png");
+            yield return Step(Neutral, 0.05f, 4); // ~0.2 s into the document's 0.45 s fade-in
+            Assert.Greater(_about.DocumentAlpha, 0.1f);
+            Assert.Less(_about.DocumentAlpha, 0.95f);
+            Debug.Log($"[about-screen] hand-over still: veil={_video.FadeAmount:F2}, documentAlpha={_about.DocumentAlpha:F2}");
+            yield return Capture("hub-about-handover.png");
+
+            // (b2) the document, fully faded in.
+            yield return Step(Neutral, 0.1f, 10);
             Assert.IsTrue(_about.IsOpen);
             Assert.AreEqual(1f, _about.DocumentAlpha, 1e-3f);
             yield return Capture("hub-about-open.png");

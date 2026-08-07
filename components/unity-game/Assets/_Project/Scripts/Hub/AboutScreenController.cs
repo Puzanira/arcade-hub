@@ -16,6 +16,21 @@ namespace AiGameStudio.ArcadeHub
     /// can be launched from under it, and the story of the cabinet scrolls under the joystick. A second
     /// MENU press — or a minute of nobody touching anything — puts the reel back, sound and all.
     ///
+    /// The two screens never overlap while they are changing places (founder, 2026-08-08: «плохо
+    /// наслаивается текст поверх — пока происходит фейд видео, уже виден текст, грязно. Нужно: СНАЧАЛА
+    /// выцветает видео, ПОТОМ на него вцветает текст»). The hand-over is strictly sequential in BOTH
+    /// directions:
+    ///
+    /// <code>
+    ///   opening:  MENU ─► reel fades out (1.2 s) ─► veil at max ─► document fades in (0.45 s)
+    ///   closing:  MENU ─► document fades out (0.3 s) ─► fully gone ─► reel fades back in (0.8 s)
+    /// </code>
+    ///
+    /// The hand-over points are read off the ACTUAL states — <see cref="AttractVideoScreen.FadeAmount"/>
+    /// on the way in, this screen's own alpha on the way out — never off copies of the two durations.
+    /// Retuning <see cref="AttractZones.ReelFadeOutSeconds"/> or <see cref="AboutLayout.FadeInSeconds"/>
+    /// therefore cannot desynchronise them into the smeared cross-fade the founder rejected.
+    ///
     /// Three things are deliberately NOT owned here:
     /// • the reel's pause-with-a-fade is the one <see cref="AttractVideoScreen.TickEngagement"/> already
     ///   performs for a charging control — this screen only raises the same flag
@@ -58,6 +73,7 @@ namespace AiGameStudio.ArcadeHub
         private readonly List<Texture2D> _photoTextures = new List<Texture2D>();
 
         private AttractOverlay _overlay;
+        private AttractVideoScreen _video;
         private HoldToLaunchController _holdToLaunch;
 
         private Canvas _canvas;
@@ -77,11 +93,31 @@ namespace AiGameStudio.ArcadeHub
 
         // -------- read surface (tests / tooling) --------
 
-        /// <summary>True while the document is up.</summary>
+        /// <summary>True while the document is up (from the MENU press, before it has faded in).</summary>
         public bool IsOpen => _machine.IsOpen;
 
-        /// <summary>The reel is suspended for exactly as long as the document is up.</summary>
-        public bool SuspendsReel => _machine.IsOpen;
+        /// <summary>
+        /// The reel stays suspended for as long as the document is up OR still leaving the screen. That
+        /// tail is what makes the CLOSE sequential: the reel may not start coming back underneath a
+        /// document that is still visible, however faintly.
+        /// </summary>
+        public bool SuspendsReel => _machine.IsOpen || _alpha > 0f;
+
+        /// <summary>
+        /// True once the reel has FINISHED leaving — the veil is at its maximum and the picture is
+        /// frozen. The document waits for this before it starts arriving, so the two never overlap.
+        ///
+        /// Read off the reel's real fade rather than off a copy of its duration; a scene with no reel at
+        /// all (or with nobody driving it — the overlay is the reel's clock) has nothing to wait for and
+        /// reports true, so a bare document still opens.
+        /// </summary>
+        public bool ReelHasLeft => _video == null || _overlay == null || _video.FadeAmount >= 1f;
+
+        /// <summary>
+        /// True in the gap between the MENU press and the document starting to arrive — the reel is
+        /// still fading out and the screen must show NO text (test seam for the sequence).
+        /// </summary>
+        public bool IsWaitingForReel => _machine.IsOpen && !ReelHasLeft;
 
         /// <summary>The document's fade, 0 (gone) … 1 (fully opaque).</summary>
         public float DocumentAlpha => _alpha;
@@ -156,11 +192,13 @@ namespace AiGameStudio.ArcadeHub
         // -------- wiring --------
 
         /// <summary>
-        /// Bind the screen to the attract chrome it has to push aside and to the launcher it has to
-        /// mute while it is up. Both may be null (a bare document still opens and closes).
+        /// Bind the screen to the reel it hands the screen over with, to the attract chrome it has to
+        /// push aside, and to the launcher it has to mute while it is up. All three may be null (a bare
+        /// document still opens and closes — it simply has nothing to wait for).
         /// </summary>
-        public void Bind(AttractOverlay overlay, HoldToLaunchController holdToLaunch)
+        public void Bind(AttractVideoScreen video, AttractOverlay overlay, HoldToLaunchController holdToLaunch)
         {
+            _video = video;
             _overlay = overlay;
             _holdToLaunch = holdToLaunch;
             if (_overlay != null) _overlay.BindSuspender(this);
@@ -170,6 +208,7 @@ namespace AiGameStudio.ArcadeHub
         private void Start()
         {
             EnsureBuilt();
+            if (_video == null) _video = FindAnyObjectByType<AttractVideoScreen>();
             if (_overlay == null) _overlay = FindAnyObjectByType<AttractOverlay>();
             if (_holdToLaunch == null) _holdToLaunch = FindAnyObjectByType<HoldToLaunchController>();
             if (_overlay != null) _overlay.BindSuspender(this);
@@ -195,10 +234,14 @@ namespace AiGameStudio.ArcadeHub
             if (change == AboutScreenEvent.Opened) OpenDocument();
             else if (change == AboutScreenEvent.Closed || change == AboutScreenEvent.ClosedByTimeout) CloseDocument();
 
-            // Nothing may charge from under the document — raised EVERY frame (not only on the edge) so
-            // a controller that is wired in late, or a scene that is re-entered, can never be left armed.
-            if (_holdToLaunch != null) _holdToLaunch.Suspended = _machine.IsOpen;
-            if (_overlay != null) _overlay.SetChromeHidden(_machine.IsOpen);
+            // "The screen belongs to the document" — true from the MENU press until the document has
+            // completely left again, which is a little longer than IsOpen. Nothing may charge from under
+            // it, and the launcher's own title/ticker may not reappear underneath a document that is
+            // still fading out. Raised EVERY frame (not only on the edge) so a controller wired in late,
+            // or a scene re-entered, can never be left armed.
+            bool occupied = SuspendsReel;
+            if (_holdToLaunch != null) _holdToLaunch.Suspended = occupied;
+            if (_overlay != null) _overlay.SetChromeHidden(occupied);
 
             TickFade(dt);
 
@@ -232,8 +275,12 @@ namespace AiGameStudio.ArcadeHub
 
         private void TickFade(float dt)
         {
-            float target = _machine.IsOpen ? 1f : 0f;
-            float seconds = _machine.IsOpen ? AboutLayout.FadeInSeconds : AboutLayout.FadeOutSeconds;
+            // The document arrives ONLY once the reel has finished leaving. While the veil is still on
+            // its way the target stays 0, so the screen shows the reel dimming and nothing else — no
+            // text creeping up through a half-faded picture (founder, 2026-08-08: «грязно»).
+            bool arriving = _machine.IsOpen && ReelHasLeft;
+            float target = arriving ? 1f : 0f;
+            float seconds = arriving ? AboutLayout.FadeInSeconds : AboutLayout.FadeOutSeconds;
             _alpha = Mathf.MoveTowards(_alpha, target, dt / Mathf.Max(0.01f, seconds));
             if (_group != null) _group.alpha = _alpha;
 

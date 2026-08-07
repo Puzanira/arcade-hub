@@ -78,7 +78,7 @@ namespace AiGameStudio.ArcadeHub
             var aboutGO = new GameObject("AboutScreen");
             aboutGO.transform.SetParent(transform, false);
             _about = aboutGO.AddComponent<AboutScreenController>();
-            _about.Bind(_overlay, holdToLaunch);
+            _about.Bind(_video, _overlay, holdToLaunch);
         }
     }
 }

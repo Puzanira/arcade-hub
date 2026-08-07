@@ -143,10 +143,16 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>
         /// How far the reel fades: a veil in the clip's OWN background tone, so a faded reel becomes the
         /// same flat #262626 the masked band already is (no seam at <see cref="MaskBottom"/>, which a
-        /// fade-to-black would tear open). Practically opaque — founder tune 2026-08-08 («уводить ещё
-        /// сильнее, практически в 0»): the hands must NOT ghost through a charged/reading screen.
+        /// fade-to-black would tear open). FULLY opaque — founder tune 2026-08-08 («уводить ещё сильнее,
+        /// практически в 0», then «контролы должны выцветать ДО КОНЦА»): the hands must not ghost through
+        /// a charged or a reading screen at all. At 1 the veil, the zone mask and the clip's own
+        /// background are the same #262626, so a fully faded reel is ONE flat field with no seam at
+        /// <see cref="MaskBottom"/> to find — the veil covers the whole video rect, mask included.
+        ///
+        /// This value is also the gate the about document waits on: it starts arriving only once the
+        /// veil has reached this alpha (see <see cref="AboutScreenController"/>).
         /// </summary>
-        public const float ReelFadeMaxAlpha = 0.98f;
+        public const float ReelFadeMaxAlpha = 1f;
 
         /// <summary>Normalised anchor Y (0 = bottom, 1 = top) for a top-down clip row.</summary>
         public static float TopFraction(float clipRow) => 1f - clipRow / ClipHeight;
