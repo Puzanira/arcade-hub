@@ -35,7 +35,7 @@
       "displayName": "Медитация в спешке",
       "entryScene": "Packages/com.aigamestudio.game-meditation/Scenes/Game",
       "status": "installed",
-      "rainSprite": "RainSprites/ZenStones"
+      "rainSprite": "RainSprites/HandWithEye"
     },
     {
       "controlName": "Height",
