@@ -143,9 +143,10 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>
         /// How far the reel fades: a veil in the clip's OWN background tone, so a faded reel becomes the
         /// same flat #262626 the masked band already is (no seam at <see cref="MaskBottom"/>, which a
-        /// fade-to-black would tear open) and the hands stay faintly readable behind the charge.
+        /// fade-to-black would tear open). Practically opaque — founder tune 2026-08-08 («уводить ещё
+        /// сильнее, практически в 0»): the hands must NOT ghost through a charged/reading screen.
         /// </summary>
-        public const float ReelFadeMaxAlpha = 0.85f;
+        public const float ReelFadeMaxAlpha = 0.98f;
 
         /// <summary>Normalised anchor Y (0 = bottom, 1 = top) for a top-down clip row.</summary>
         public static float TopFraction(float clipRow) => 1f - clipRow / ClipHeight;
