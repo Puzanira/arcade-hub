@@ -18,6 +18,21 @@ namespace AiGameStudio.ArcadeHub
     }
 
     /// <summary>
+    /// Something that needs the attract reel out of the way — currently the «История проекта» document
+    /// (<see cref="AboutScreenController"/>), which takes the whole screen.
+    ///
+    /// The reel's fade-out-and-freeze is NOT re-implemented for it: this flag is OR-ed into the very
+    /// signal a charging control raises (<see cref="AttractOverlay.TickReel"/>), so both cases run
+    /// through the one <see cref="AttractVideoScreen.TickEngagement"/> path — one fade, one pause, one
+    /// return with sound.
+    /// </summary>
+    public interface IReelSuspender
+    {
+        /// <summary>True while the reel must stay faded out and frozen.</summary>
+        bool SuspendsReel { get; }
+    }
+
+    /// <summary>
     /// attract-screen v2 (founder, 2026-08-05). <see cref="AttractVideoScreen"/> hides the clip's baked
     /// credits line and its baked «НАЖМИ ЧТО-НИБУДЬ» title behind a background-tone panel; this
     /// component draws the launcher's own versions of both into that reclaimed band:
@@ -93,7 +108,9 @@ namespace AiGameStudio.ArcadeHub
         public bool AutoTick = true;
 
         private IAttractSlotSource _source;
+        private IReelSuspender _suspender;
         private AttractVideoScreen _video;
+        private bool _chromeHidden;
         private Font _font;
         private Font _creditsFont;
 
@@ -159,6 +176,31 @@ namespace AiGameStudio.ArcadeHub
             BuildView((RectTransform)video.Screen.transform);
         }
 
+        /// <summary>
+        /// Register whatever may need the reel suspended for reasons other than a charging control (the
+        /// about document). Optional; without one the reel only responds to hold-to-launch.
+        /// </summary>
+        public void BindSuspender(IReelSuspender suspender)
+        {
+            _suspender = suspender;
+        }
+
+        /// <summary>
+        /// Take the launcher's own chrome — the title and the credits ticker — off the screen while
+        /// something full-screen is up. The charge bar hides itself (it only exists while charging, and
+        /// nothing can charge while the document is open).
+        /// </summary>
+        public void SetChromeHidden(bool hidden)
+        {
+            if (_chromeHidden == hidden) return;
+            _chromeHidden = hidden;
+            if (_title != null) _title.gameObject.SetActive(!hidden);
+            if (_creditsViewport != null) _creditsViewport.gameObject.SetActive(!hidden);
+        }
+
+        /// <summary>True while the title + ticker are hidden behind a full-screen screen (test seam).</summary>
+        public bool ChromeHidden => _chromeHidden;
+
         private void Start()
         {
             if (_title != null) return;
@@ -192,7 +234,12 @@ namespace AiGameStudio.ArcadeHub
         private void TickReel(float dt)
         {
             if (_video == null) return;
-            _video.TickEngagement(_source != null && _source.ActiveSlot >= 0, dt);
+            // Two reasons to put the reel away, ONE mechanism: a control being charged, or a full-screen
+            // screen over the launcher (the about document). Both fade it out over the same 1.2 s and
+            // freeze it at the bottom of that fade; both bring it back, with sound, the same way.
+            bool charging = _source != null && _source.ActiveSlot >= 0;
+            bool suspended = _suspender != null && _suspender.SuspendsReel;
+            _video.TickEngagement(charging || suspended, dt);
         }
 
         private void TickCredits(float dt)

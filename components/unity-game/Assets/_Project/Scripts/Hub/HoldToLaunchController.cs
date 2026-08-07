@@ -74,6 +74,17 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>When false, <see cref="Update"/> does not advance — tests drive <see cref="Tick"/> with a fixed dt.</summary>
         public bool AutoTick = true;
 
+        /// <summary>
+        /// While true, NOTHING charges and nothing rains: the launcher is muted because a full-screen
+        /// screen is up over the attract reel (the «История проекта» document — see
+        /// <see cref="AboutScreenController"/>). The joystick that scrolls that document is also a slot's
+        /// launch control, so this is not cosmetic: without it, reading the story would start a game.
+        ///
+        /// The charge is HELD AT ZERO rather than left to decay, so no partial charge can survive under
+        /// the document and no launch can fire out from behind it.
+        /// </summary>
+        public bool Suspended { get; set; }
+
         private LauncherConfig _config;
         private LaunchInputSampler _sampler;
         private LaunchChargeMachine _machine;
@@ -186,6 +197,16 @@ namespace AiGameStudio.ArcadeHub
         public void Tick(float dt)
         {
             if (_machine == null) return;
+
+            if (Suspended)
+            {
+                // Muted by a full-screen screen: input is not even read, the machine is pinned at idle,
+                // and the bar and the rain are cleared. Nothing can be launched from under the document.
+                _machine.Reset();
+                ClearFlowers();
+                SetBarFill(0f);
+                return;
+            }
 
             ControlReadings r = ReadInput();
             _sampler.Sample(r, dt, _engaged);

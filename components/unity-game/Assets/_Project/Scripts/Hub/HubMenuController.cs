@@ -20,12 +20,16 @@ namespace AiGameStudio.ArcadeHub
     {
         private AttractVideoScreen _video;
         private AttractOverlay _overlay;
+        private AboutScreenController _about;
 
         /// <summary>The attract video screen built by this controller (test seam).</summary>
         public AttractVideoScreen Video => _video;
 
         /// <summary>The credits ticker + fading title drawn into the reclaimed band (test seam).</summary>
         public AttractOverlay Overlay => _overlay;
+
+        /// <summary>The «История проекта» document the MENU button opens over the reel (test seam).</summary>
+        public AboutScreenController About => _about;
 
         private void Start()
         {
@@ -65,6 +69,16 @@ namespace AiGameStudio.ArcadeHub
             // only this component knows when the reel exists; the call is order-independent.
             if (holdToLaunch != null)
                 holdToLaunch.AttachChargeBarTo(_video);
+
+            // The MENU button's second job on the attract screen (founder, 2026-08-07): lift the
+            // «История проекта» document over the reel. It is built here, dormant — it costs one empty
+            // canvas until somebody presses the button. Binding it to the overlay is what lets it borrow
+            // the reel's existing fade-and-freeze, and to the launcher what keeps a game from starting
+            // under the open document.
+            var aboutGO = new GameObject("AboutScreen");
+            aboutGO.transform.SetParent(transform, false);
+            _about = aboutGO.AddComponent<AboutScreenController>();
+            _about.Bind(_overlay, holdToLaunch);
         }
     }
 }
