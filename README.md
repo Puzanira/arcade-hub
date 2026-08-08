@@ -115,9 +115,20 @@
 
 ### Референсные прошивки — как примеры
 
-Готовые скетчи, с которых удобно начать. Это наша сборка, а не требование:
+Готовые скетчи, с которых удобно начать, — все в папке
+[`Firmware/`](https://github.com/Puzanira/arcade-controls/tree/main/Firmware)
+репозитория `arcade-controls` (там же README с зависимостями). Это наша
+сборка, а не требование:
 
-* `Firmware/CabinetPanel/CabinetPanel.ino` (репозиторий `arcade-controls`) —
+* **`Firmware/Yandex/Yandex.ino` — если у тебя родная плата автомата** (все
+  8 органов на одном Arduino: джойстик D2–D5, кнопки D6–D9, динамо-крутилка
+  на A0, два датчика VL53L0X с XSHUT D10/D11). Это адаптация оригинальной
+  прошивки автомата под протокол лаунчера: разводка сохранена один в один,
+  ничего не перепаивать — только перезалить скетч. Маппинг кнопок
+  (NO=красная, YES=зелёная, ACTION=«!», SYSTEM=меню) меняется define'ами в
+  шапке. На живом автомате ещё не проверялась — первым делом прогони стенд
+  проверки контролов (ниже).
+* `Firmware/CabinetPanel/CabinetPanel.ino` —
   крутилка-энкодер и четыре кнопки, шлёт `C,…`, представляется `CABINET_PANEL`.
   Разводка и сборка расписаны в
   [`docs/LESSON_WIRING.md`](https://github.com/Puzanira/arcade-controls/blob/main/docs/LESSON_WIRING.md);
@@ -126,11 +137,13 @@
   D2 = красная   D3 = зелёная   D4 = «!»   D5 = меню (TTP223, HIGH = касание)
   D6 = энкодер CLK   D7 = энкодер DT   (+/VCC → 5V, GND → GND)
   ```
-* `ArduinoFirmware/CombinedBoard/CombinedBoard.ino` (репозиторий `lady_bug`,
-  ветка `arcade-contract-repack-v2`) — авторская плата: джойстик и два датчика
+* `Firmware/CombinedBoard/CombinedBoard.ino` — джойстик и два датчика
   расстояния на одном Arduino, шлёт объединённую строку `G,…,J,…`,
   представляется `JOYSTICK`. Рядом лежат раздельные варианты
-  `Joystick/Joystick.ino` и `GestureSensors/GestureSensors.ino`.
+  `Joystick/Joystick.ino` и `GestureSensors/GestureSensors.ino` и
+  диагностический `SingleSensorTest.ino` (сырые миллиметры одного датчика —
+  прозвонить датчик до сборки). Скетчам с датчиками нужна библиотека
+  **VL53L0X by Pololu** из Library Manager.
 
 > **Набор органов у тебя другой?** Напиши, какая плата и какие органы есть
 > физически — соберём прошивку под тебя. Все восемь контролов умещаются и на
