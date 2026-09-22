@@ -271,6 +271,14 @@ namespace AiGameStudio.ArcadeHub.Tests
             if (!hadEventSystem)
                 Assert.IsNull(EventSystem.current, "The screen does not drag an EventSystem into the cabinet.");
 
+            // The bar is alive: the notches march while frames are running. (They necessarily stand
+            // still during the blocking load itself — which is exactly why the bar is drawn FULL, so a
+            // frozen frame cannot be misread as progress stuck part-way.)
+            float notchX = screen.Notches.anchoredPosition.x;
+            for (int i = 0; i < 10; i++) yield return null;
+            Assert.AreNotEqual(notchX, screen.Notches.anchoredPosition.x,
+                "The loading bar's notch row must march — a dead bar is what 'hung' looks like.");
+
             // Behavioural: with the screen up, the cabinet's own polled input still reaches the launcher —
             // a control charges its slot exactly as it would without it.
             for (int i = 0; i < 10; i++)
