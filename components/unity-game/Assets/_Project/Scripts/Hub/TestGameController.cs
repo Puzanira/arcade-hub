@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using AiGameStudio.ArcadeControls;
 
@@ -24,6 +23,7 @@ namespace AiGameStudio.ArcadeHub
         private RectTransform _player;
         private Font _font;
         private bool _menuPrev;
+        private bool _returning;
 
         private void OnEnable() => InstanceCount++;
         private void OnDisable() => InstanceCount--;
@@ -42,9 +42,16 @@ namespace AiGameStudio.ArcadeHub
                 _player.anchoredPosition += v * (400f * Time.deltaTime);
             }
 
-            // Die cleanly on the MENU button rising edge -> back to the launcher.
+            // Die cleanly on the MENU button rising edge -> back to the launcher, behind the same
+            // loading screen every other transition on the cabinet uses (the load blocks; the screen
+            // goes up first). Latched, because the load is a couple of frames away and the button may
+            // still be down when the next rising edge would otherwise be read.
             bool menu = ArcadeInput.MenuButton.IsHeld;
-            if (menu && !_menuPrev) SceneManager.LoadScene(HubScenes.HubMenu);
+            if (menu && !_menuPrev && !_returning)
+            {
+                _returning = true;
+                LoadingScreen.LoadSceneWhenShown(HubScenes.HubMenu, AttractOverlay.CabinetName);
+            }
             _menuPrev = menu;
         }
 

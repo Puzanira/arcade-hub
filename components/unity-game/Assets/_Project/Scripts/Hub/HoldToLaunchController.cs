@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using AiGameStudio.ArcadeControls;
 
@@ -89,6 +88,7 @@ namespace AiGameStudio.ArcadeHub
         private LaunchInputSampler _sampler;
         private LaunchChargeMachine _machine;
         private bool[] _engaged;
+        private bool _launching;
 
         private Canvas _canvas;
         private RectTransform _barRoot;   // the framed bar as a whole; tracks the attract reel's own rect
@@ -122,6 +122,12 @@ namespace AiGameStudio.ArcadeHub
 
         public float Charge => _machine?.Charge ?? 0f;
         public int ActiveSlot => _machine?.ActiveSlot ?? -1;
+
+        /// <summary>
+        /// True once a slot has fired and the loading screen owns the screen: the launcher is latched
+        /// and reads no more input (test seam).
+        /// </summary>
+        public bool IsLaunching => _launching;
 
         /// <summary>
         /// The config this controller was built from. Exposed so <see cref="AttractOverlay"/> can name
@@ -198,6 +204,11 @@ namespace AiGameStudio.ArcadeHub
         {
             if (_machine == null) return;
 
+            // Latched by a launch in flight: the loading screen is up and the scene load is a frame or
+            // two away. Reading input here would only let a still-held control charge a second slot
+            // behind the screen.
+            if (_launching) return;
+
             if (Suspended)
             {
                 // Muted by a full-screen screen: input is not even read, the machine is pinned at idle,
@@ -227,7 +238,14 @@ namespace AiGameStudio.ArcadeHub
                 // launcher arms a return watchdog. The built-in TestGame returns to the menu itself.
                 if (slot.entryScene != HubScenes.TestGame)
                     LauncherReturn.ArmFor(HubScenes.HubMenu, slot.nativeInput);
-                SceneManager.LoadScene(slot.entryScene);
+
+                // The scene load is BLOCKING — the picture stops for a second or more. Hand it to the
+                // loading screen, which puts the game's name on the glass and only then loads (see
+                // LoadingScreen). Those are a couple of extra frames in which the charge is still full
+                // and the control still held, so the launcher is latched here: nothing charges, nothing
+                // fires twice, and the player cannot start a second game out from under the screen.
+                _launching = true;
+                LoadingScreen.LoadSceneWhenShown(slot.entryScene, slot.displayName);
                 return;
             }
 

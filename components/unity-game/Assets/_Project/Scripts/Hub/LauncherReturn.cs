@@ -97,7 +97,13 @@ namespace AiGameStudio.ArcadeHub
             if (held)
             {
                 _fired = true;
-                SceneManager.LoadScene(_returnScene);
+                // The load is BLOCKING and the menu then rebuilds its whole attract stack, so this is
+                // the longest freeze on the cabinet — and the one the player is least patient with: they
+                // just pressed a button and are waiting for something to happen. The loading screen goes
+                // up first and the load runs underneath it (see LoadingScreen), over whatever the game
+                // had on the screen and without touching this watchdog's contract: the exit gesture, the
+                // scene it returns to and this object's self-destruct are all unchanged.
+                LoadingScreen.LoadSceneWhenShown(_returnScene, AttractOverlay.CabinetName);
                 Destroy(gameObject);
             }
         }
