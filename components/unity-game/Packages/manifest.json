@@ -1,12 +1,12 @@
 {
   "dependencies": {
     "com.aigamestudio.arcade-controls": "file:../../../../arcade-controls/components/unity-game/Packages/com.aigamestudio.arcade-controls",
-    "com.aigamestudio.game-home-alone": "file:../../../../home-alone/components/unity-game/Assets/_Project",
-    "com.aigamestudio.game-life-choices": "file:../../../../life-choices/components/unity-game/Assets/_Project",
-    "com.aigamestudio.game-meditation": "file:../../../../meditation/components/unity-game/Assets/_Project",
-    "com.aigamestudio.game-endless-sisyphus": "file:../../../../../external/EndlessSisyphusUnity/Assets/EndlessSisyphus",
-    "com.aigamestudio.game-factory": "file:../../../../../external/factory_game/Assets/FactoryGame",
-    "com.aigamestudio.game-lady-bug": "file:../../../../../external/lady_bug-v2/UnityProject/Assets/LadyBug",
+    "com.aigamestudio.game-home-alone": "https://github.com/Puzanira/home-alone.git?path=/components/unity-game/Assets/_Project#080fa1f906a37a2aab18ba6b7cb5e62c9047679e",
+    "com.aigamestudio.game-life-choices": "https://github.com/Puzanira/life-choices.git?path=/components/unity-game/Assets/_Project#b1deec2f74f03de9fc4d7026c2da81067a69b79d",
+    "com.aigamestudio.game-meditation": "https://github.com/Puzanira/meditation.git?path=/components/unity-game/Assets/_Project#83869bfff17a997be681727aa94cb5f2264b8be4",
+    "com.aigamestudio.game-endless-sisyphus": "https://github.com/Puzanira/EndlessSisyphusUnity.git?path=/Assets/EndlessSisyphus#33684b31775b4f981cc8a13b65a801fdcd38ec44",
+    "com.aigamestudio.game-factory": "https://github.com/Puzanira/factory_game.git?path=/Assets/FactoryGame#bb8852878073841b7d86a4baf7224bc7746f7ee3",
+    "com.aigamestudio.game-lady-bug": "https://github.com/Puzanira/lady_bug.git?path=/UnityProject/Assets/LadyBug#05368cbafd73839c6b6885594c28c641f8654d38",
     "com.coplaydev.unity-mcp": "https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main",
     "com.unity.2d.animation": "15.1.0",
     "com.unity.2d.aseprite": "5.0.3",
