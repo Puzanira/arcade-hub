@@ -153,7 +153,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         // ---------------- the SHIPPED placeholder document ----------------
 
         [Test]
-        public void ShippedContent_Parses_AndCarriesPlaceholdersOfEveryKind()
+        public void ShippedContent_Parses_AndCarriesBlocksOfEveryKind()
         {
             string path = AboutContentLoader.ContentPath;
             Assert.IsTrue(File.Exists(path), $"The about document must ship in StreamingAssets ({path}).");
@@ -177,8 +177,11 @@ namespace AiGameStudio.ArcadeHub.Tests
 
             Assert.AreEqual(1, titles, "One title — the cabinet's name.");
             Assert.GreaterOrEqual(headings, 1);
-            Assert.GreaterOrEqual(paragraphs, 3, "At least the promised placeholder paragraphs.");
-            Assert.AreEqual(2, photos, "Two placeholder process photos.");
+            Assert.GreaterOrEqual(paragraphs, 3, "The story is told in prose, not just headings.");
+            // Not a fixed number: the shipped document is authored content (real text and photos
+            // since 2026-09-22) and the founder adds to it. The invariant is that it is illustrated
+            // and that every file it names ships beside it — checked below.
+            Assert.GreaterOrEqual(photos, 2, "The story is illustrated.");
             Assert.GreaterOrEqual(captions, 2);
 
             foreach (AboutBlock block in content.Blocks)

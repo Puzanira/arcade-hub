@@ -425,7 +425,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         // ---------------- the shipped placeholders really render ----------------
 
         [UnityTest]
-        public IEnumerator Document_RendersThePlaceholderStory_WithBothPhotos()
+        public IEnumerator Document_RendersTheStory_WithEveryPhotoItNames()
         {
             yield return LoadHub();
             yield return PressMenu();
@@ -450,7 +450,13 @@ namespace AiGameStudio.ArcadeHub.Tests
             Assert.IsTrue(titleFound, $"The document opens on the cabinet's name «{AttractOverlay.CabinetName}».");
 
             var photos = _about.PhotoBlocks;
-            Assert.AreEqual(2, photos.Count, "Both placeholder process photos are drawn.");
+            // Count is the founder's call, not ours — the document is authored content and grows.
+            // What must hold is that EVERY photo it names is drawn and fits the reading column.
+            Assert.GreaterOrEqual(photos.Count, 2, "The story is illustrated — at least two images.");
+            int photoBlocks = 0;
+            foreach (AboutBlock b in _about.Content.Blocks)
+                if (b.Kind == AboutBlockType.Photo) photoBlocks++;
+            Assert.AreEqual(photoBlocks, photos.Count, "Every photo block in the document is actually drawn.");
             foreach (RectTransform photo in photos)
             {
                 Assert.LessOrEqual(photo.rect.width, AboutLayout.ColumnWidth + 0.5f,

@@ -90,12 +90,17 @@ namespace AiGameStudio.ArcadeHub
         public const string CabinetName = "6 режимов суеты";
 
         /// <summary>
-        /// The authors, read off the shipped clip's baked credits line (which is legible but dim).
+        /// The ticker line, dictated by the founder 2026-09-22. Three parts in one sentence:
+        /// the seven game authors, the «Кавардак» team they built the cabinet with, and the
+        /// pointer to the MENU button — which is the only hint a passer-by gets that the
+        /// «История проекта» document exists at all (<see cref="AboutScreenController"/>).
         /// Kept here rather than in launcher-config.json because it credits the CABINET, not a slot.
         /// </summary>
         public const string CreditsLine =
-            "Авторы: Ирина Пузанова, Екатерина Гребенюк, Лада Реботунова, Иван Меркурьев, " +
-            "Александра Новохацкая, Максим Юнин, Антон Михалёв";
+            "Авторы игр: Ирина Пузанова, Екатерина Гребенюк, Лада Реботунова, Иван Меркурьев, " +
+            "Александра Новохацкая, Максим Юнин, Антон Михалёв. " +
+            "Совместно с командой «Кавардак»: Фёдор Балашов, Тимофей Петренко, Полина Аштаева, " +
+            "Аркадий Кукин. Нажмите «Меню» для информации.";
 
         /// <summary>Tail appended to each repetition so the looped ticker reads as one continuous line.</summary>
         public const string CreditsSeparator = "   ·   ";
@@ -128,6 +133,21 @@ namespace AiGameStudio.ArcadeHub
         private Font _creditsFont;
 
         private RectTransform _creditsViewport;
+
+        /// <summary>Width of the band's left edge reserved for the brand mark (clip pixels).</summary>
+        private const float BrandMarkReservedWidth = 210f;
+
+        /// <summary>Mark height as a share of the band — leaves air above and below.</summary>
+        private const float BrandMarkHeightFraction = 0.62f;
+
+        /// <summary>Gap between the screen edge and the mark.</summary>
+        private const float BrandMarkSideMargin = 24f;
+
+        private UnityEngine.UI.Image _brandMark;
+        private UnityEngine.UI.Image _brandBackdrop;
+
+        /// <summary>The Y—ART mark in the credits band (test seam); null if the sprite is missing.</summary>
+        public UnityEngine.UI.Image BrandMark => _brandMark;
         private readonly Text[] _creditsCopies = new Text[2];
         private float _creditsScroll;
         private float _creditsPeriod;
@@ -207,6 +227,10 @@ namespace AiGameStudio.ArcadeHub
             _chromeHidden = hidden;
             if (_title != null) _title.gameObject.SetActive(!hidden);
             if (_creditsViewport != null) _creditsViewport.gameObject.SetActive(!hidden);
+            // The mark lives in the same band as the ticker and hides with it — otherwise it would
+            // hang alone over the «История проекта» document.
+            if (_brandMark != null) _brandMark.gameObject.SetActive(!hidden);
+            if (_brandBackdrop != null) _brandBackdrop.gameObject.SetActive(!hidden);
         }
 
         /// <summary>True while the title + ticker are hidden behind a full-screen screen (test seam).</summary>
@@ -410,7 +434,8 @@ namespace AiGameStudio.ArcadeHub
             _creditsViewport = viewportGO.GetComponent<RectTransform>();
             _creditsViewport.anchorMin = new Vector2(0f, AttractZones.BottomFraction(AttractZones.CreditsBandBottom));
             _creditsViewport.anchorMax = new Vector2(1f, AttractZones.TopFraction(AttractZones.CreditsBandTop));
-            _creditsViewport.offsetMin = Vector2.zero;
+            // Left edge cleared for the mark, so the names start beside it instead of running underneath.
+            _creditsViewport.offsetMin = new Vector2(BrandMarkReservedWidth, 0f);
             _creditsViewport.offsetMax = Vector2.zero;
 
             // Two copies, one period apart, both scrolling: whichever leaves on the left has its twin
@@ -442,6 +467,65 @@ namespace AiGameStudio.ArcadeHub
 
             _creditsPeriod = 0f;
             _creditsScroll = 0f;
+
+            // LAST, so it draws over the scrolling names: sibling order is UI draw order. The Y—ART mark
+            // (founder, 2026-09-22) sits STILL at the head of the band while the names pass behind it —
+            // a brand mark that slides off screen every few seconds is not a brand mark. The art is
+            // white-on-transparent: the source is black and would be invisible against the clip's #262626.
+            BuildBrandMark(videoRect);
+        }
+
+        /// <summary>
+        /// The Y—ART mark at the head of the credits band, held still while the names scroll past it.
+        /// Sized by the band's own height so it can never outgrow the strip the mask reclaimed.
+        ///
+        /// It comes with its OWN opaque backdrop in the band's flat #262626, and it is built LAST so it
+        /// draws over the ticker. That backdrop is what makes the mark work at all: the ticker labels
+        /// are <see cref="HorizontalWrapMode.Overflow"/> and scroll by moving their rect, so glyphs keep
+        /// rendering well past the viewport's left edge — reserving width alone let the names slide
+        /// straight under the mark (founder, 2026-09-25: «титры накладываются и лезут теперь под него»).
+        /// A RectMask2D is not the answer here for the reason spelled out in <see cref="BuildCredits"/>.
+        /// Painting the band's own colour is: the names simply disappear behind it, seamlessly, because
+        /// the strip they cross is that exact colour already.
+        /// </summary>
+        private void BuildBrandMark(RectTransform videoRect)
+        {
+            var sprite = Resources.Load<Sprite>("Brand/YArtLogo");
+            if (sprite == null) return; // no mark shipped → band behaves exactly as before
+
+            float bandHeight = AttractZones.CreditsBandBottom - AttractZones.CreditsBandTop;
+            float markHeight = bandHeight * BrandMarkHeightFraction;
+            float markWidth = markHeight * (sprite.rect.width / sprite.rect.height);
+
+            // Backdrop first, mark on top of it — both anchored to the band's left edge.
+            var backdropGO = new GameObject("BrandMarkBackdrop", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            backdropGO.transform.SetParent(videoRect, false);
+            var backdropRt = backdropGO.GetComponent<RectTransform>();
+            LayoutBandLeftEdge(backdropRt, 0f, BrandMarkReservedWidth);
+            var backdrop = backdropGO.GetComponent<UnityEngine.UI.Image>();
+            backdrop.color = AttractZones.BackgroundColor;
+            backdrop.raycastTarget = false;
+            _brandBackdrop = backdrop;
+
+            var go = new GameObject("BrandMark", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+            go.transform.SetParent(videoRect, false);
+            LayoutBandLeftEdge(go.GetComponent<RectTransform>(), BrandMarkSideMargin, markWidth);
+
+            var img = go.GetComponent<UnityEngine.UI.Image>();
+            img.sprite = sprite;
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            _brandMark = img;
+        }
+
+        /// <summary>Anchors a rect to the credits band's left edge, <paramref name="width"/> wide.</summary>
+        private static void LayoutBandLeftEdge(RectTransform rt, float left, float width)
+        {
+            rt.anchorMin = new Vector2(0f, AttractZones.BottomFraction(AttractZones.CreditsBandBottom));
+            rt.anchorMax = new Vector2(0f, AttractZones.TopFraction(AttractZones.CreditsBandTop));
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.offsetMin = new Vector2(left, 0f);
+            rt.offsetMax = new Vector2(left + width, 0f);
         }
 
         private void BuildTitle(RectTransform videoRect)
