@@ -39,25 +39,28 @@ namespace AiGameStudio.ArcadeHub
         /// gesture. Replaces any existing instance so every launch gets a clean release-guard. Call this
         /// immediately BEFORE loading the game scene.
         ///
-        /// <paramref name="pumpInput"/> is for games that DON'T read through <see cref="ArcadeInput"/>
-        /// (native/legacy input — <see cref="LauncherSlot.nativeInput"/>). Such a game never pumps
-        /// ArcadeInput, so the watchdog would read a frozen MenuButton and could never fire. When true, the
-        /// watchdog carries its own <see cref="ArcadeInputRunner"/> (DontDestroyOnLoad, into the game scene)
-        /// so the universal exit gesture still works. ArcadeInput-native games leave it false — they pump
-        /// ArcadeInput themselves and must not be double-pumped.
+        /// The watchdog reads the MenuButton through <see cref="ArcadeInput"/>, so SOMETHING has to pump it
+        /// inside the game scene — including for games that never touch ArcadeInput themselves (native /
+        /// legacy input: <see cref="LauncherSlot.nativeInput"/>). That is no longer this object's business:
+        /// <see cref="ArcadeInputRunner.Ensure"/> hands back the cabinet's ONE process-wide grabber (a
+        /// DontDestroyOnLoad object built at the first menu entry, owner of the boards and of the single
+        /// per-frame pump), which keeps pumping straight through the game scene. The call is idempotent —
+        /// it can never start a second scan or a second pump; it only guarantees a grabber exists.
         /// </summary>
-        public static void ArmFor(string returnScene, bool pumpInput = false)
+        public static void ArmFor(string returnScene)
         {
             if (_instance != null)
                 Destroy(_instance.gameObject);
+
+            // Belt and braces: the exit gesture must work even if the launcher scene somehow came up
+            // without a runner. A no-op whenever the grabber is already live (the normal case).
+            ArcadeInputRunner.Ensure();
 
             var go = new GameObject("~LauncherReturn");
             DontDestroyOnLoad(go);
             var lr = go.AddComponent<LauncherReturn>();
             lr._returnScene = returnScene;
             lr._spawnFrame = Time.frameCount;
-            if (pumpInput)
-                go.AddComponent<ArcadeInputRunner>(); // sole ArcadeInput init+pump for a native-input game
             _instance = lr;
         }
 

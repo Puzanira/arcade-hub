@@ -42,10 +42,16 @@ namespace AiGameStudio.ArcadeHub
         /// <summary>
         /// True for games that DON'T read input through <see cref="AiGameStudio.ArcadeControls.ArcadeInput"/>
         /// (native/legacy input — e.g. Lady Bug on the old Input Manager, Factory on the raw new Input System).
-        /// Such a game never pumps ArcadeInput, so the launcher's return watchdog would see a frozen MenuButton.
-        /// When set, the launcher attaches its own input pump alongside the return watchdog so the universal
-        /// MenuButton exit gesture still works. ArcadeInput-native games (Sisyphus, Home Alone, Life Choices)
-        /// leave this false — they pump ArcadeInput themselves and must not be double-pumped.
+        ///
+        /// It no longer changes the input topology, and that is the point: the pump used to be per-launch
+        /// (the return watchdog carried its own <c>ArcadeInputRunner</c> for these slots, and an
+        /// ArcadeInput-native game pumped for itself), which is exactly what made the boards be re-scanned
+        /// on every transition. Now the cabinet has ONE process-wide grabber
+        /// (<c>ArcadeInputRunner.Ensure</c>) that owns the boards and pumps every frame in every scene, so
+        /// the watchdog's MenuButton works for every slot regardless of this flag.
+        ///
+        /// It stays because it is a true, useful FACT about the game — whether it reads the cabinet through
+        /// the shared facade at all — and the loader's tests pin it per shipped slot.
         /// </summary>
         public bool nativeInput;
 

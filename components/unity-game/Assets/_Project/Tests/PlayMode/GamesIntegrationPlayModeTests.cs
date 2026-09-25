@@ -24,9 +24,10 @@ namespace AiGameStudio.ArcadeHub.Tests
     /// the hub's menu scene), and that the MenuButton exit gesture hands the cabinet back.
     ///
     /// External games play with their NATIVE input; the launcher's universal MenuButton return works even
-    /// for the two that never pump ArcadeInput (Lady Bug on the legacy Input Manager, Factory on the raw new
-    /// Input System) because the watchdog carries its own input pump for <see cref="LauncherSlot.nativeInput"/>
-    /// slots. Sisyphus / Home Alone / Life Choices pump ArcadeInput themselves.
+    /// for the two that never touch ArcadeInput (Lady Bug on the legacy Input Manager, Factory on the raw
+    /// new Input System — <see cref="LauncherSlot.nativeInput"/>) because the cabinet's ONE process-wide
+    /// grabber (<see cref="ArcadeInputRunner"/> on a DontDestroyOnLoad object) keeps pumping ArcadeInput
+    /// straight through the game scene instead of dying with the menu scene.
     ///
     /// When run WITH graphics (no -nographics) each game case captures a 1920×1080 PNG of the running game to
     /// <c>HUB_SHOT_DIR</c> and asserts zero magenta (no missing shaders/sprites). Under -nographics the
@@ -52,16 +53,24 @@ namespace AiGameStudio.ArcadeHub.Tests
         // push on one axis is the gesture — the same "hold your own control" rule as the buttons.
         private static BackendSnapshot HoldMeditation => new BackendSnapshot { Joystick = Vector2.up };  // Joystick
 
-        // Replace whatever backend the current scene's runner installed with a code-driven fake we pump.
-        // NEVER destroys the watchdog's own runner: for nativeInput games it is the production return path
-        // and killing it would fake the proof (use ExitToMenuViaWatchdogRunner there, not this).
+        // Replace whatever backend the cabinet's grabber installed with a code-driven fake we pump
+        // ourselves. The live grabber goes down with it: it pumps every frame in every scene, and a second
+        // pump behind the test's back would count every crank degree twice. For nativeInput games the
+        // return must instead run THROUGH the live grabber — see ExitToMenuViaPersistentGrabber.
         private void TakeOverInput()
         {
+            ArcadeInputRunner.Shutdown();
             foreach (var r in UnityEngine.Object.FindObjectsByType<ArcadeInputRunner>(FindObjectsSortMode.None))
-                if (LauncherReturn.Instance == null || r.gameObject != LauncherReturn.Instance.gameObject)
-                    UnityEngine.Object.DestroyImmediate(r);
+                UnityEngine.Object.DestroyImmediate(r);
             _fake = new FakeBackend();
             ArcadeInput.Initialize(_fake);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            // Never leave a grabber (and its serial scan thread / open ports) behind for the next test.
+            ArcadeInputRunner.Shutdown();
         }
 
         private void Push(BackendSnapshot snapshot, float dt = 0.1f)
@@ -115,23 +124,26 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         // The SAME exit gesture for nativeInput games (Lady Bug, Factory), driven HONESTLY through the
-        // production path: those games never pump ArcadeInput, so the watchdog's own ArcadeInputRunner
-        // (attached by LauncherReturn.ArmFor for nativeInput slots) is the ONLY pump. The test must NOT
-        // destroy it and must NOT call ArcadeInput.Update itself — it only swaps the backend for a fake
-        // and lets the LIVE runner poll it each frame, exactly as the keyboard is polled on the cabinet.
-        private IEnumerator ExitToMenuViaWatchdogRunner()
+        // production path: those games never pump ArcadeInput, so the cabinet's process-wide grabber (the
+        // DontDestroyOnLoad ~ArcadeInput object, which lives THROUGH this scene load) is the ONLY pump. The
+        // test must NOT destroy it and must NOT call ArcadeInput.Update itself — it only swaps the backend
+        // for a fake and lets the LIVE grabber poll it each frame, exactly as the boards are polled on the
+        // cabinet.
+        private IEnumerator ExitToMenuViaPersistentGrabber()
         {
             Assert.IsNotNull(LauncherReturn.Instance, "The return watchdog must be alive inside the game.");
-            var runner = LauncherReturn.Instance.GetComponent<ArcadeInputRunner>();
-            Assert.IsNotNull(runner,
-                "A nativeInput slot's watchdog must carry its own ArcadeInputRunner (the game never pumps ArcadeInput).");
+            ArcadeInputRunner grabber = ArcadeInputRunner.Live;
+            Assert.IsNotNull(grabber,
+                "The cabinet's grabber must still be pumping inside the game scene (the game never pumps ArcadeInput).");
+            Assert.AreEqual("DontDestroyOnLoad", grabber.gameObject.scene.name,
+                "The grabber must belong to no scene — that is what carries it (and the open ports) into the game.");
 
-            _fake = new FakeBackend();               // swap the backend only; the runner keeps pumping
+            _fake = new FakeBackend();               // swap the backend only; the grabber keeps pumping
             ArcadeInput.Initialize(_fake);
             _fake.Next = Neutral;
-            for (int i = 0; i < 4; i++) yield return null; // release SEEN via the live runner's pump
+            for (int i = 0; i < 4; i++) yield return null; // release SEEN via the live grabber's pump
 
-            _fake.Next = MenuHeld;                   // fresh press — again read by the runner, not by us
+            _fake.Next = MenuHeld;                   // fresh press — again read by the grabber, not by us
             yield return WaitForActiveScene(HubScenes.HubMenu, 240);
         }
 
@@ -176,14 +188,14 @@ namespace AiGameStudio.ArcadeHub.Tests
 
         // Shared body: enter an installed game by charging its own control to full, prove it is alive +
         // the watchdog armed, shoot it, then return to the launcher and prove the launcher is back up.
-        // For nativeInput games the exit gesture runs through the LIVE watchdog runner (the production
+        // For nativeInput games the exit gesture runs through the LIVE grabber's pump (the production
         // path); for ArcadeInput-native games the test pumps ArcadeInput itself, standing in for the
         // game's own pump.
         private IEnumerator RunGame(BackendSnapshot heldControl, string sceneName, string ns, string shot, bool nativeInput)
         {
             yield return SceneManager.LoadSceneAsync(HubScenes.HubMenu, LoadSceneMode.Single);
             yield return null;
-            TakeOverInput(); // menu phase: the MENU's scene runner is hub-owned and replaceable
+            TakeOverInput(); // menu phase: the cabinet's grabber is hub-owned and replaceable by a fake
 
             yield return EnterByHold(heldControl, sceneName);
 
@@ -193,10 +205,10 @@ namespace AiGameStudio.ArcadeHub.Tests
 
             if (nativeInput)
             {
-                // Do NOT touch the watchdog's runner — it is the only ArcadeInput pump in this scene and
-                // the exact production path for the MenuButton return. Screenshot first (backend neutral).
+                // Do NOT touch the live grabber — it is the only ArcadeInput pump in this scene and the
+                // exact production path for the MenuButton return. Screenshot first (backend neutral).
                 yield return TryCapture(shot);
-                yield return ExitToMenuViaWatchdogRunner();
+                yield return ExitToMenuViaPersistentGrabber();
             }
             else
             {
@@ -222,7 +234,7 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [UnityTest]
-        public IEnumerator Factory_LaunchesByRedHold_ReturnsViaWatchdogPump_JanitorSweepsDdol_ReentryWorks()
+        public IEnumerator Factory_LaunchesByRedHold_ReturnsViaGrabberPump_JanitorSweepsDdol_ReentryWorks()
         {
             // Red HOLD charges the Factory slot to full — the founder's gate-2 fix: red no longer
             // instant-launches the highlighted row (that path is gone), it charges its OWN slot.
@@ -240,8 +252,8 @@ namespace AiGameStudio.ArcadeHub.Tests
             yield return EnterByHold(HoldFactory, "Boot");
             AssertGameAlive("LastShift", "Factory must boot again cleanly after the janitor sweep.");
 
-            // Leave the cabinet on the menu — again through the live watchdog runner.
-            yield return ExitToMenuViaWatchdogRunner();
+            // Leave the cabinet on the menu — again through the live grabber.
+            yield return ExitToMenuViaPersistentGrabber();
             Assert.IsNotNull(UnityEngine.Object.FindAnyObjectByType<HubMenuController>(), "The launcher menu is back.");
         }
 
@@ -252,10 +264,10 @@ namespace AiGameStudio.ArcadeHub.Tests
         }
 
         [UnityTest]
-        public IEnumerator LadyBug_LaunchesByHeightSensorHold_IsAlive_ReturnsViaWatchdogPump()
+        public IEnumerator LadyBug_LaunchesByHeightSensorHold_IsAlive_ReturnsViaGrabberPump()
         {
             // Legacy Input Manager game: never pumps ArcadeInput — the return MUST go through the
-            // watchdog's own runner, which this test leaves alive (the honest production path).
+            // process-wide grabber, which this test leaves alive (the honest production path).
             yield return RunGame(HoldLadyBug, "Main", "LadyBug", "hub-into-ladybug.png", nativeInput: true);
         }
 

@@ -237,7 +237,7 @@ namespace AiGameStudio.ArcadeHub
                 // External games reset in place on MenuButton but don't know the hub's menu scene, so the
                 // launcher arms a return watchdog. The built-in TestGame returns to the menu itself.
                 if (slot.entryScene != HubScenes.TestGame)
-                    LauncherReturn.ArmFor(HubScenes.HubMenu, slot.nativeInput);
+                    LauncherReturn.ArmFor(HubScenes.HubMenu);
 
                 // The scene load is BLOCKING — the picture stops for a second or more. Hand it to the
                 // loading screen, which puts the game's name on the glass and only then loads (see
