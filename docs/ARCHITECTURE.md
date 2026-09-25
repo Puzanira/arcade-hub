@@ -187,13 +187,38 @@ watchdog that watches the same `ArcadeInput.MenuButton` and loads `HubMenu` on t
 destroys itself. The gesture is the universal cabinet rule (and matches Home Alone's own exit): a
 MenuButton still held while the game LOADS must not exit — a release is seen first, then a fresh press
 fires (plus a one-frame warmup). It is armed from the single launch path (`HoldToLaunchController.Fire`)
-and skipped for the self-returning TestGame. For `nativeInput` slots (games that never pump
-`ArcadeInput` — Lady Bug on the legacy Input Manager, Factory on the raw new Input System) the watchdog
-carries its own `ArcadeInputRunner` so the MenuButton gesture still reads; ArcadeInput-native games must
-not be double-pumped and get no runner. On every menu entry `HubDdolJanitor` sweeps foreign
+and skipped for the self-returning TestGame. The watchdog reads the MenuButton through `ArcadeInput`,
+which something must pump inside the game scene — including for `nativeInput` games that never touch it
+(Lady Bug on the legacy Input Manager, Factory on the raw new Input System). That is the cabinet's ONE
+input grabber's job now (see below), so `ArmFor` merely calls `ArcadeInputRunner.Ensure()`.
+On every menu entry `HubDdolJanitor` sweeps foreign
 DontDestroyOnLoad objects leaked by external games (e.g. Factory's `GameManager`/`ArduinoInputBridge`) —
 whitelisted namespaces (`AiGameStudio*`, `Unity*`, `TMPro`) survive; games recreate their singletons on
 entry.
+
+### Input ownership: ONE grabber for the whole cabinet run
+
+The launcher owns the cabinet's input, and it owns it **for the process, not for the scene**. The
+`ArcadeInputRunner` component in `HubMenu.unity` hands the job on `Awake` to a `DontDestroyOnLoad`
+object (`~ArcadeInput`, from `ArcadeInputRunner.Ensure()` in the arcade-controls package ≥0.6.0) and
+removes itself. That object owns the serial boards (scan thread + open ports) and is the single
+`ArcadeInput.Update` pump in every scene, launcher and game alike.
+
+Why: it used to die with each scene, which disposed the `SerialBackend` — closing the ports and
+stopping the scan — and the next scene rebuilt it and re-scanned from zero. A board that resets when
+its port opens answers only ~1.5–2 s later, times every candidate port, sequentially: seconds of dead
+controls on EVERY launch and EVERY return (founder, live stand: «всё время задержка в поиске ардуино»).
+Now the boards are found once per cabinet start and the connection simply stays up; hot-plug still
+works, because the scan thread keeps watching the device list — it just never starts over.
+
+Consequences the launcher relies on:
+- the return watchdog needs no pump of its own, and `nativeInput` no longer changes anything about
+  input (it stays as a recorded fact about the game);
+- games that add a runner "if the scene has none" (Life Choices, Meditation) find the grabber and add
+  nothing; games that pump "only if they own the backend" (Sisyphus, Factory) see a live backend and
+  stay quiet — so there is exactly ONE pump per frame everywhere (a second one doubles crank speed);
+- the grabber lives in the DDOL scene, so `HubDdolJanitor`'s `AiGameStudio*` whitelist is what keeps
+  the sweep from killing the cabinet's input — pinned by `InputGrabberLifetimePlayModeTests`.
 
 ### Tests
 
@@ -218,8 +243,9 @@ are consumed as `file:` packages on their arcade branches
 scenes (Sisyphus, Lady Bug) collide by short name, so their `entryScene` in the config is the full
 package path. Compatibility debt, deliberately hub-side: `activeInputHandler=Both` (Lady Bug is on the
 legacy Input Manager); external games play with their NATIVE keyboard input for now (moving them onto
-`ArcadeInput` is a later increment per game); `nativeInput` slots get a watchdog-carried input pump and
-the DDOL janitor sweeps their leaked singletons (see `LauncherReturn` above).
+`ArcadeInput` is a later increment per game); `nativeInput` slots are pumped by the cabinet's one
+process-wide grabber (originally by a watchdog-carried runner — see "Input ownership" above) and the
+DDOL janitor sweeps their leaked singletons.
 
 ## Original path to stage ③ (for reference)
 
